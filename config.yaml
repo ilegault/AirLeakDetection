@@ -1,0 +1,46 @@
+data:
+  raw_data_path: "data/raw"
+  processed_data_path: "data/processed"
+  sample_rate: 10000  # Hz
+  duration: 10  # seconds
+  n_channels: 9  # 3 accelerometers x 3 axes
+
+preprocessing:
+  fft_size: 2048
+  window: "hanning"
+  overlap: 0.5
+  freq_max: 2000  # Hz
+  normalize: true
+
+features:
+  time_domain:
+    - "rms"
+    - "peak_to_peak"
+    - "kurtosis"
+    - "skewness"
+  frequency_domain:
+    - "peak_frequency"
+    - "spectral_centroid"
+    - "band_power"
+
+model:
+  cnn:
+    input_shape: [1024, 9]  # [frequency_bins, channels]
+    conv_layers: [32, 64, 128]
+    kernel_size: 7
+    dropout_rate: 0.3
+    dense_layers: [256, 128]
+
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  validation_split: 0.15
+  test_split: 0.15
+  early_stopping_patience: 10
+
+classes:
+  0: "no_leak"
+  1: "1_8"
+  2: "1_16"
+  3: "3_32"
