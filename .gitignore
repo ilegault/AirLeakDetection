@@ -218,3 +218,10 @@ temp/
 # Model files and checkpoints (already covered above, but being explicit)
 /models/
 /models/**
+
+# Zencoder IDE helper files
+.zencoder/
+
+# Results directory (generated during experiments)
+/results/
+/results/**
