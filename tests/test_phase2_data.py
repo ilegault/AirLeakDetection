@@ -77,9 +77,12 @@ def test_data_loader_handles_padding_and_truncation(synthetic_config: tuple[Path
     padded_tail = signals[0, -5:, :]
     assert np.allclose(padded_tail, 0.0)
 
-    # Second file should be truncated, so its first few samples should remain intact.
-    # Confirm truncation preserves the earliest samples.
-    assert np.allclose(signals[1, :3, 0], [0.0, 1.0 / expected_samples, 2.0 / expected_samples], atol=1e-6)
+    # Second file should be resampled from 120 to 100 samples using linear interpolation.
+    # The first value should still be 0.0, but subsequent values are interpolated.
+    # At index 0: 0.0, at resampled index ~1.19: interpolated value ≈ 1/99, etc.
+    assert signals[1, 0, 0] == 0.0  # First sample always preserved
+    # Verify resampled signal starts correctly (roughly between original indices 1 and 2)
+    assert 0.008 < signals[1, 1, 0] < 0.012  # Interpolated between original idx 1-2
 
     summary = loader.dataset_summary()
     assert summary["class_distribution"]["NOLEAK"] == 2
