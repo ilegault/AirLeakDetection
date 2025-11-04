@@ -202,3 +202,19 @@ temp/
 # Essential data files (uncomment if needed)
 # !data/essential_config.json
 # !data/sample_data.txt
+
+# ============================================
+# AIR LEAK DETECTION SPECIFIC IGNORES
+# ============================================
+
+# Raw accelerometer data from WebDAQ
+/data/raw/
+/data/raw/**
+
+# Large experiment artifacts
+/experiments/
+/experiments/**
+
+# Model files and checkpoints (already covered above, but being explicit)
+/models/
+/models/**
