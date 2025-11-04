@@ -114,7 +114,7 @@ def run_cross_validation(args):
         # Import necessary modules
         import numpy as np
         import json
-        from src.training.cross_validation import CrossValidator, evaluate_with_cross_validation
+        from src.training.cross_validator import CrossValidator, evaluate_with_cross_validation
         from src.models.cnn_1d import CNN1DBuilder
         from src.models.cnn_2d import CNN2DBuilder
         from src.models.lstm_model import LSTMBuilder

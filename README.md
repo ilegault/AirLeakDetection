@@ -149,7 +149,7 @@ This keeps the repository lightweight and prevents accidental commits of large d
 
 ## Authors
 
-[Add author information]
+Isaac Legault
 
 ## References
 

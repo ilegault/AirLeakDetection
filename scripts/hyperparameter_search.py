@@ -128,7 +128,7 @@ def run_hyperparameter_search(args):
         # Import necessary modules
         import numpy as np
         import json
-        from src.training.hyperparameter_tuning import (
+        from src.training.hyperparameter_tuner import (
             GridSearchTuner, RandomSearchTuner, BayesianOptimizationTuner,
             suggest_hyperparameter_space
         )
