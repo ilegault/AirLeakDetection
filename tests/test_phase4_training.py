@@ -350,12 +350,12 @@ class TestEarlyStoppingCallback:
     def test_early_stopping_on_improvement(self, simple_model):
         """Test early stopping tracks improvement."""
         callback = EarlyStoppingCallback(patience=2, restore_best_weights=False)
-        callback.model = simple_model
-        
+        callback.set_model(simple_model)
+
         logs_1 = {"val_loss": 0.5}
         callback.on_epoch_end(0, logs_1)
         assert callback.best_value == 0.5
-        
+
         logs_2 = {"val_loss": 0.4}
         callback.on_epoch_end(1, logs_2)
         assert callback.best_value == 0.4
@@ -364,15 +364,15 @@ class TestEarlyStoppingCallback:
     def test_early_stopping_on_plateau(self, simple_model):
         """Test early stopping on plateau."""
         callback = EarlyStoppingCallback(patience=2, restore_best_weights=False)
-        callback.model = simple_model
-        
+        callback.set_model(simple_model)
+
         logs_1 = {"val_loss": 0.5}
         callback.on_epoch_end(0, logs_1)
-        
+
         logs_2 = {"val_loss": 0.5}
         callback.on_epoch_end(1, logs_2)
         assert callback.wait_count == 1
-        
+
         logs_3 = {"val_loss": 0.5}
         callback.on_epoch_end(2, logs_3)
         assert callback.wait_count == 2
