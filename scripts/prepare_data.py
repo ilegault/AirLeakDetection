@@ -136,14 +136,152 @@ def prepare_data(args):
         
         logger.info(f"Raw data path: {args.raw_data}")
         logger.info(f"Output path: {args.output_dir}")
-        
-        # TODO: Implement actual data processing logic
-        logger.info("Data preparation logic to be implemented with Phase 2 (Data Pipeline)")
-        
+
         # Log configuration
         logger.info(f"Computing FFT: {args.compute_fft}")
         logger.info(f"Data augmentation: {args.augment}")
         logger.info(f"Stratified splitting: {args.stratified}")
+
+        # Import necessary modules
+        from src.data.data_loader import WebDAQDataLoader
+        from src.data.preprocessor import SignalPreprocessor, PreprocessingConfig
+        from src.data.data_splitter import DataSplitter
+        from src.data.fft_processor import FlexibleFFTProcessor
+        from src.data.augmentor import DataAugmentor
+        import numpy as np
+
+        # Load raw data
+        logger.info("Loading raw data...")
+        data_loader = WebDAQDataLoader(
+            data_dir=str(raw_path),
+            sample_rate=51200  # Default sample rate for WebDAQ
+        )
+        signals, labels, file_paths = data_loader.load_data()
+        logger.info(f"Loaded {len(signals)} samples from {len(np.unique(labels))} classes")
+
+        # Initialize preprocessor
+        preproc_config = PreprocessingConfig(
+            detrend_type='linear',
+            window_type='hanning',
+            fft_size=2048
+        )
+        preprocessor = SignalPreprocessor(preproc_config)
+
+        # Preprocess signals
+        logger.info("Preprocessing signals...")
+        processed_signals = []
+        for i, signal in enumerate(signals):
+            processed = preprocessor.preprocess(signal)
+            processed_signals.append(processed)
+            if (i + 1) % 100 == 0:
+                logger.info(f"Processed {i + 1}/{len(signals)} signals")
+        processed_signals = np.array(processed_signals)
+
+        # Compute FFT if requested
+        fft_features = None
+        if args.compute_fft:
+            logger.info("Computing FFT features...")
+            fft_processor = FlexibleFFTProcessor(
+                fft_size=2048,
+                sample_rate=51200,
+                method='scipy'
+            )
+            fft_features = []
+            for i, signal in enumerate(processed_signals):
+                fft_result = fft_processor.compute_fft(signal)
+                fft_features.append(fft_result)
+                if (i + 1) % 100 == 0:
+                    logger.info(f"Computed FFT for {i + 1}/{len(processed_signals)} signals")
+            fft_features = np.array(fft_features)
+
+        # Split data
+        logger.info("Splitting data into train/val/test sets...")
+        splitter = DataSplitter(
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+            stratified=args.stratified
+        )
+        train_idx, val_idx, test_idx = splitter.split(processed_signals, labels)
+
+        logger.info(f"Train set: {len(train_idx)} samples")
+        logger.info(f"Validation set: {len(val_idx)} samples")
+        logger.info(f"Test set: {len(test_idx)} samples")
+
+        # Apply augmentation to training data if requested
+        augmented_train_signals = processed_signals[train_idx]
+        augmented_train_labels = labels[train_idx]
+
+        if args.augment:
+            logger.info("Applying data augmentation to training set...")
+            augmentor = DataAugmentor(
+                noise_level=0.01,
+                shift_range=100,
+                scale_range=(0.9, 1.1)
+            )
+
+            aug_signals = []
+            aug_labels = []
+            for i, (signal, label) in enumerate(zip(processed_signals[train_idx], labels[train_idx])):
+                # Add original
+                aug_signals.append(signal)
+                aug_labels.append(label)
+
+                # Add augmented versions
+                aug_signal = augmentor.augment(signal)
+                aug_signals.append(aug_signal)
+                aug_labels.append(label)
+
+            augmented_train_signals = np.array(aug_signals)
+            augmented_train_labels = np.array(aug_labels)
+            logger.info(f"Augmented training set from {len(train_idx)} to {len(augmented_train_signals)} samples")
+
+        # Save processed data
+        logger.info("Saving processed data...")
+
+        # Save train set
+        np.save(output_path / "train" / "signals.npy", augmented_train_signals)
+        np.save(output_path / "train" / "labels.npy", augmented_train_labels)
+        if args.compute_fft:
+            train_fft = fft_features[train_idx]
+            if args.augment:
+                # Duplicate FFT for augmented samples
+                train_fft = np.repeat(train_fft, 2, axis=0)
+            np.save(output_path / "train" / "fft_features.npy", train_fft)
+
+        # Save validation set
+        np.save(output_path / "val" / "signals.npy", processed_signals[val_idx])
+        np.save(output_path / "val" / "labels.npy", labels[val_idx])
+        if args.compute_fft:
+            np.save(output_path / "val" / "fft_features.npy", fft_features[val_idx])
+
+        # Save test set
+        np.save(output_path / "test" / "signals.npy", processed_signals[test_idx])
+        np.save(output_path / "test" / "labels.npy", labels[test_idx])
+        if args.compute_fft:
+            np.save(output_path / "test" / "fft_features.npy", fft_features[test_idx])
+
+        # Save metadata
+        metadata = {
+            'num_classes': len(np.unique(labels)),
+            'class_names': [str(c) for c in np.unique(labels)],
+            'signal_shape': processed_signals[0].shape,
+            'train_samples': len(augmented_train_signals),
+            'val_samples': len(val_idx),
+            'test_samples': len(test_idx),
+            'augmented': args.augment,
+            'fft_computed': args.compute_fft,
+            'preprocessing': {
+                'detrend_type': preproc_config.detrend_type,
+                'window_type': preproc_config.window_type,
+                'fft_size': preproc_config.fft_size
+            }
+        }
+
+        import json
+        with open(output_path / "metadata.json", 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"Saved metadata to {output_path / 'metadata.json'}")
         
         logger.info("Data preparation completed successfully")
         return 0
