@@ -110,10 +110,127 @@ def export_model(args):
         logger.info(f"Output directory: {args.output_dir}")
         logger.info(f"Quantization: {args.quantize}")
         logger.info(f"Optimization level: {args.optimization_level}")
-        
-        # TODO: Implement model export logic
-        logger.info("Model export logic to be implemented with Phase 6 (Prediction)")
-        
+
+        # Import necessary modules
+        import tensorflow as tf
+        import numpy as np
+        import joblib
+        from pathlib import Path
+
+        model_path_obj = Path(args.model_path)
+        output_dir = Path(args.output_dir)
+
+        # Load model
+        logger.info("Loading model...")
+        if model_path_obj.suffix in ['.h5', '.keras']:
+            model = tf.keras.models.load_model(str(model_path_obj))
+            is_keras_model = True
+        elif model_path_obj.suffix in ['.pkl', '.joblib']:
+            model = joblib.load(str(model_path_obj))
+            is_keras_model = False
+        else:
+            logger.error(f"Unsupported model format: {model_path_obj.suffix}")
+            return 1
+
+        # Export based on format
+        if args.format == "tflite":
+            if not is_keras_model:
+                logger.error("TFLite export only supports Keras models")
+                return 1
+
+            logger.info("Converting model to TensorFlow Lite...")
+            converter = tf.lite.TFLiteConverter.from_keras_model(model)
+
+            # Apply optimizations
+            if args.optimization_level == "default":
+                converter.optimizations = [tf.lite.Optimize.DEFAULT]
+            elif args.optimization_level == "lite":
+                converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_SIZE]
+            elif args.optimization_level == "aggressive":
+                converter.optimizations = [tf.lite.Optimize.OPTIMIZE_FOR_LATENCY]
+
+            # Apply quantization if requested
+            if args.quantize:
+                logger.info("Applying quantization...")
+                converter.optimizations = [tf.lite.Optimize.DEFAULT]
+                converter.target_spec.supported_types = [tf.float16]
+
+            tflite_model = converter.convert()
+
+            # Save TFLite model
+            output_file = output_dir / f"{model_path_obj.stem}.tflite"
+            with open(output_file, 'wb') as f:
+                f.write(tflite_model)
+            logger.info(f"TFLite model saved to {output_file}")
+
+        elif args.format == "onnx":
+            if not is_keras_model:
+                logger.error("ONNX export only supports Keras models")
+                return 1
+
+            try:
+                import tf2onnx
+                logger.info("Converting model to ONNX...")
+
+                # Convert to ONNX
+                model_proto, _ = tf2onnx.convert.from_keras(model)
+
+                output_file = output_dir / f"{model_path_obj.stem}.onnx"
+                with open(output_file, 'wb') as f:
+                    f.write(model_proto.SerializeToString())
+
+                logger.info(f"ONNX model saved to {output_file}")
+
+            except ImportError:
+                logger.error("tf2onnx is not installed. Install with: pip install tf2onnx")
+                return 1
+
+        elif args.format == "torchscript":
+            logger.error("TorchScript export requires PyTorch model, not currently supported")
+            return 1
+
+        elif args.format == "keras":
+            if not is_keras_model:
+                logger.error("Keras export only supports Keras models")
+                return 1
+
+            logger.info("Saving model in Keras format...")
+            output_file = output_dir / f"{model_path_obj.stem}.keras"
+            model.save(str(output_file))
+            logger.info(f"Keras model saved to {output_file}")
+
+        elif args.format == "pickle":
+            if is_keras_model:
+                logger.warning("Pickle export for Keras models is not recommended, use .h5 or .keras format")
+
+            logger.info("Saving model in pickle format...")
+            output_file = output_dir / f"{model_path_obj.stem}.pkl"
+            joblib.dump(model, str(output_file))
+            logger.info(f"Pickle model saved to {output_file}")
+
+        else:
+            logger.error(f"Unsupported export format: {args.format}")
+            return 1
+
+        # Save model metadata
+        metadata = {
+            'original_model': str(args.model_path),
+            'export_format': args.format,
+            'quantized': args.quantize,
+            'optimization_level': args.optimization_level,
+            'model_type': 'keras' if is_keras_model else 'sklearn'
+        }
+
+        if is_keras_model:
+            metadata['input_shape'] = [int(d) for d in model.input_shape[1:]]
+            metadata['output_shape'] = [int(d) for d in model.output_shape[1:]]
+
+        import json
+        metadata_file = output_dir / f"{model_path_obj.stem}_metadata.json"
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        logger.info(f"Metadata saved to {metadata_file}")
         logger.info("Model export completed successfully")
         return 0
     
