@@ -131,14 +131,128 @@ def run_predictions(args):
         logger.info(f"Output: {args.output}")
         logger.info(f"Confidence threshold: {args.confidence_threshold}")
         logger.info(f"Output format: {args.output_format}")
-        
+
         # Create output directory
         output_path = Path(args.output)
         FileUtils.ensure_directory(str(output_path.parent))
-        
-        # TODO: Implement actual prediction logic
-        logger.info("Prediction logic to be implemented with Phase 6 (Prediction Pipeline)")
-        
+
+        # Import necessary modules
+        import numpy as np
+        import json
+        import csv
+        from src.prediction.predictor import LeakDetector
+        from src.prediction.batch_processor import BatchProcessor
+
+        # Initialize predictor
+        logger.info("Loading model...")
+        predictor = LeakDetector(model_path=args.model_path)
+
+        input_path = Path(args.input)
+        predictions = []
+
+        # Check if input is a file or directory
+        if input_path.is_file():
+            logger.info(f"Running prediction on single file: {input_path}")
+
+            # Load single file
+            if input_path.suffix == '.npy':
+                data = np.load(str(input_path))
+            elif input_path.suffix == '.csv':
+                data = np.loadtxt(str(input_path), delimiter=',')
+            else:
+                logger.error(f"Unsupported file format: {input_path.suffix}")
+                return 1
+
+            # Run prediction
+            result = predictor.predict_single(data)
+
+            predictions.append({
+                'file': str(input_path.name),
+                'prediction': int(result['prediction']),
+                'confidence': float(result['confidence']),
+                'probabilities': result['probabilities'].tolist()
+            })
+
+            logger.info(f"Prediction: Class {result['prediction']}")
+            logger.info(f"Confidence: {result['confidence']:.4f}")
+
+        elif input_path.is_dir():
+            logger.info(f"Running batch predictions on directory: {input_path}")
+
+            # Find all data files in directory
+            data_files = list(input_path.glob('*.npy')) + list(input_path.glob('*.csv'))
+
+            if not data_files:
+                logger.warning(f"No data files found in {input_path}")
+                return 1
+
+            logger.info(f"Found {len(data_files)} files to process")
+
+            # Process files in batches
+            batch_processor = BatchProcessor(predictor=predictor, batch_size=args.batch_size)
+
+            for i, file_path in enumerate(data_files):
+                try:
+                    # Load file
+                    if file_path.suffix == '.npy':
+                        data = np.load(str(file_path))
+                    elif file_path.suffix == '.csv':
+                        data = np.loadtxt(str(file_path), delimiter=',')
+                    else:
+                        logger.warning(f"Skipping unsupported file: {file_path}")
+                        continue
+
+                    # Run prediction
+                    result = predictor.predict_single(data)
+
+                    # Apply confidence threshold
+                    if result['confidence'] >= args.confidence_threshold:
+                        predictions.append({
+                            'file': str(file_path.name),
+                            'prediction': int(result['prediction']),
+                            'confidence': float(result['confidence']),
+                            'probabilities': result['probabilities'].tolist()
+                        })
+
+                    if (i + 1) % 10 == 0:
+                        logger.info(f"Processed {i + 1}/{len(data_files)} files")
+
+                except Exception as e:
+                    logger.warning(f"Failed to process {file_path}: {e}")
+                    continue
+
+            logger.info(f"Successfully processed {len(predictions)} files")
+
+        else:
+            logger.error(f"Input path not found: {args.input}")
+            return 1
+
+        # Save predictions based on output format
+        logger.info(f"Saving predictions to {output_path} in {args.output_format} format...")
+
+        if args.output_format == 'json':
+            with open(output_path, 'w') as f:
+                json.dump(predictions, f, indent=2)
+
+        elif args.output_format == 'csv':
+            with open(output_path, 'w', newline='') as f:
+                if predictions:
+                    fieldnames = ['file', 'prediction', 'confidence']
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for pred in predictions:
+                        writer.writerow({
+                            'file': pred['file'],
+                            'prediction': pred['prediction'],
+                            'confidence': pred['confidence']
+                        })
+
+        elif args.output_format == 'txt':
+            with open(output_path, 'w') as f:
+                for pred in predictions:
+                    f.write(f"{pred['file']}: Class {pred['prediction']} (confidence: {pred['confidence']:.4f})\n")
+
+        logger.info(f"Saved {len(predictions)} predictions to {output_path}")
         logger.info("Predictions completed successfully")
         return 0
     

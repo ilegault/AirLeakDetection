@@ -229,11 +229,144 @@ def train_model(args):
         logger.info(f"Batch size: {args.batch_size}")
         logger.info(f"Learning rate: {args.learning_rate}")
         logger.info(f"Using FFT: {args.use_fft}")
-        
-        # TODO: Implement actual training logic
-        # This would call the appropriate training module
-        logger.info("Training logic to be implemented with Phase 4 (Training Pipeline)")
-        
+
+        # Import necessary modules
+        import numpy as np
+        import json
+        from src.training.trainer import ModelTrainer
+        from src.training.callbacks import get_callbacks
+        from src.models.cnn_1d import CNN1DBuilder
+        from src.models.cnn_2d import CNN2DBuilder
+        from src.models.lstm_model import LSTMBuilder
+        from src.models.random_forest import RandomForestModel
+        from src.models.svm_classifier import SVMClassifier
+
+        # Load training data
+        logger.info("Loading training data...")
+        data_path_obj = Path(args.data_path)
+
+        # Determine which features to use
+        feature_file = "fft_features.npy" if args.use_fft else "signals.npy"
+
+        X_train = np.load(data_path_obj / "train" / feature_file)
+        y_train = np.load(data_path_obj / "train" / "labels.npy")
+        X_val = np.load(data_path_obj / "val" / feature_file)
+        y_val = np.load(data_path_obj / "val" / "labels.npy")
+
+        logger.info(f"Training data shape: {X_train.shape}")
+        logger.info(f"Validation data shape: {X_val.shape}")
+        logger.info(f"Number of classes: {len(np.unique(y_train))}")
+
+        num_classes = len(np.unique(y_train))
+
+        # Build model based on type
+        logger.info(f"Building {args.model_type} model...")
+
+        if args.model_type == "cnn_1d":
+            builder = CNN1DBuilder()
+            model = builder.build(
+                input_shape=X_train.shape[1:],
+                num_classes=num_classes,
+                conv_filters=[64, 128, 256],
+                kernel_sizes=[3, 3, 3],
+                dense_units=[128, 64]
+            )
+            is_deep_learning = True
+
+        elif args.model_type == "cnn_2d":
+            builder = CNN2DBuilder()
+            # Reshape for 2D CNN if needed
+            if len(X_train.shape) == 2:
+                X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1, 1)
+                X_val = X_val.reshape(X_val.shape[0], X_val.shape[1], 1, 1)
+            model = builder.build(
+                input_shape=X_train.shape[1:],
+                num_classes=num_classes,
+                conv_filters=[32, 64, 128],
+                kernel_sizes=[(3, 3), (3, 3), (3, 3)],
+                dense_units=[128, 64]
+            )
+            is_deep_learning = True
+
+        elif args.model_type == "lstm":
+            builder = LSTMBuilder()
+            # Ensure 3D shape for LSTM (samples, timesteps, features)
+            if len(X_train.shape) == 2:
+                X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
+                X_val = X_val.reshape(X_val.shape[0], X_val.shape[1], 1)
+            model = builder.build(
+                input_shape=X_train.shape[1:],
+                num_classes=num_classes,
+                lstm_units=[128, 64],
+                dense_units=[64]
+            )
+            is_deep_learning = True
+
+        elif args.model_type == "random_forest":
+            model = RandomForestModel(n_estimators=300, max_depth=None, n_jobs=-1)
+            is_deep_learning = False
+
+        elif args.model_type == "svm":
+            model = SVMClassifier(kernel='rbf', C=1.0)
+            is_deep_learning = False
+
+        else:
+            logger.error(f"Unsupported model type: {args.model_type}")
+            return 1
+
+        # Train model
+        if is_deep_learning:
+            # Use ModelTrainer for deep learning models
+            trainer = ModelTrainer(model=model, model_name=args.model_type)
+
+            # Compile model
+            trainer.compile(
+                optimizer='adam',
+                learning_rate=args.learning_rate,
+                loss='sparse_categorical_crossentropy',
+                metrics=['accuracy']
+            )
+
+            # Get callbacks
+            callbacks = get_callbacks(
+                model_dir=str(model_dir),
+                early_stopping_patience=10,
+                reduce_lr_patience=5
+            )
+
+            # Train
+            history = trainer.fit(
+                X_train, y_train,
+                validation_data=(X_val, y_val),
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                callbacks=callbacks
+            )
+
+            # Save model
+            model_path = model_dir / f"{args.model_type}_model.h5"
+            trainer.save_checkpoint(str(model_path))
+            logger.info(f"Model saved to {model_path}")
+
+        else:
+            # Traditional ML models
+            # Flatten features if needed
+            if len(X_train.shape) > 2:
+                X_train = X_train.reshape(X_train.shape[0], -1)
+                X_val = X_val.reshape(X_val.shape[0], -1)
+
+            logger.info("Training model...")
+            model.fit(X_train, y_train)
+
+            # Evaluate on validation set
+            val_accuracy = model.evaluate(X_val, y_val)
+            logger.info(f"Validation accuracy: {val_accuracy:.4f}")
+
+            # Save model
+            model_path = model_dir / f"{args.model_type}_model.pkl"
+            model.save(str(model_path))
+            logger.info(f"Model saved to {model_path}")
+
         # Save training parameters to output directory
         params_file = model_dir / "training_params.yaml"
         training_params = {
