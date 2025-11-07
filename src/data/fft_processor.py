@@ -60,20 +60,19 @@ class FlexibleFFTProcessor:
             raise
 
     def compute_matlab_style_fft(self, signal_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Replicate MATLAB approach: average 3 sensors then compute FFT.
+        """Replicate MATLAB approach: average 3 axes then compute FFT.
         
         Args:
-            signal_data: Shape (timesteps, 9) for 3 accelerometers x 3 axes
+            signal_data: Shape (timesteps, 3) for X, Y, Z axes
             
         Returns:
             frequencies, magnitude_spectrum
         """
-        if signal_data.shape[1] != 9:
-            LOGGER.warning("Expected 9 channels (3 sensors x 3 axes), got %d", signal_data.shape[1])
+        if signal_data.shape[1] != 3:
+            LOGGER.warning("Expected 3 channels (X, Y, Z axes), got %d", signal_data.shape[1])
 
-        # Average across the 3 sensors (each sensor has 3 axes)
-        averaged = np.mean([signal_data[:, i*3:(i+1)*3] for i in range(3)], axis=0)  # (timesteps, 3)
-        averaged = np.mean(averaged, axis=1)  # (timesteps,)
+        # Average across the 3 axes
+        averaged = np.mean(signal_data, axis=1)  # (timesteps,)
 
         # Apply Hanning window
         window = np.hanning(len(averaged))

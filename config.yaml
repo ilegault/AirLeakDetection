@@ -3,7 +3,7 @@ data:
   processed_data_path: "data/processed"
   sample_rate: 10000
   duration: 10
-  n_channels: 9
+  n_channels: 3
 
 preprocessing:
   fft_size: 2048
@@ -22,6 +22,6 @@ training:
 
 classes:
   0: "NOLEAK"
-  1: "SMALL_1_16"
-  2: "MEDIUM_3_32"
-  3: "LARGE_1_8"
+  1: "1_16"
+  2: "3_32"
+  3: "1_8"
