@@ -60,99 +60,125 @@ class FlexibleFFTProcessor:
             raise
 
     def compute_matlab_style_fft(self, signal_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Replicate MATLAB approach: average 3 axes then compute FFT.
+        """Compute FFT for each accelerometer separately (not averaged).
         
         Args:
-            signal_data: Shape (timesteps, 3) for X, Y, Z axes
+            signal_data: Shape (timesteps, 3) for 3 separate accelerometers
             
         Returns:
-            frequencies, magnitude_spectrum
+            frequencies: Shape (n_freqs,)
+            magnitude_spectrum: Shape (n_freqs, 3) - FFT for each accelerometer
         """
         if signal_data.shape[1] != 3:
-            LOGGER.warning("Expected 3 channels (X, Y, Z axes), got %d", signal_data.shape[1])
+            LOGGER.warning("Expected 3 accelerometers, got %d", signal_data.shape[1])
 
-        # Average across the 3 axes
-        averaged = np.mean(signal_data, axis=1)  # (timesteps,)
-
-        # Apply Hanning window
-        window = np.hanning(len(averaged))
-        windowed = averaged * window
-
-        # Compute FFT
-        fft_result = rfft(windowed, n=self.fft_size)
-        magnitude = np.abs(fft_result)
+        # Compute FFT for EACH accelerometer separately
+        magnitude_list = []
+        for i in range(signal_data.shape[1]):
+            # Extract signal for this accelerometer
+            single_channel = signal_data[:, i]
+            
+            # Apply Hanning window
+            window = np.hanning(len(single_channel))
+            windowed = single_channel * window
+            
+            # Compute FFT
+            fft_result = rfft(windowed, n=self.fft_size)
+            magnitude = np.abs(fft_result)
+            magnitude_list.append(magnitude)
+        
+        # Stack magnitudes: shape (n_freqs, 3)
+        magnitude_stacked = np.column_stack(magnitude_list)
         frequencies = rfftfreq(self.fft_size, d=1.0 / self.sample_rate)
 
         # Limit to frequency range
         mask = (frequencies >= self.freq_min) & (frequencies <= self.freq_max)
-        return frequencies[mask], magnitude[mask]
+        return frequencies[mask], magnitude_stacked[mask, :]
 
     def compute_scipy_fft(self, signal_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Compute FFT using scipy with Hanning window.
+        """Compute FFT for each accelerometer separately using scipy with Hanning window.
         
         Args:
-            signal_data: Shape (timesteps, channels)
+            signal_data: Shape (timesteps, 3) for 3 separate accelerometers
             
         Returns:
-            frequencies, magnitude_spectrum (averaged across channels)
+            frequencies: Shape (n_freqs,)
+            magnitude_spectrum: Shape (n_freqs, 3) - FFT for each accelerometer
         """
-        # Average across channels
-        if signal_data.ndim == 2:
-            averaged = np.mean(signal_data, axis=1)
-        else:
-            averaged = signal_data
-
-        # Apply window
-        window = scipy_signal.windows.hann(len(averaged))
-        windowed = averaged * window
-
-        # Compute FFT
-        fft_result = rfft(windowed, n=self.fft_size)
-        magnitude = np.abs(fft_result)
+        if signal_data.ndim == 1:
+            # Single channel
+            signal_data = signal_data.reshape(-1, 1)
+        
+        # Compute FFT for EACH accelerometer separately
+        magnitude_list = []
+        for i in range(signal_data.shape[1]):
+            # Extract signal for this accelerometer
+            single_channel = signal_data[:, i]
+            
+            # Apply window
+            window = scipy_signal.windows.hann(len(single_channel))
+            windowed = single_channel * window
+            
+            # Compute FFT
+            fft_result = rfft(windowed, n=self.fft_size)
+            magnitude = np.abs(fft_result)
+            magnitude_list.append(magnitude)
+        
+        # Stack magnitudes: shape (n_freqs, n_channels)
+        magnitude_stacked = np.column_stack(magnitude_list)
         frequencies = rfftfreq(self.fft_size, d=1.0 / self.sample_rate)
 
         # Limit to frequency range
         mask = (frequencies >= self.freq_min) & (frequencies <= self.freq_max)
-        return frequencies[mask], magnitude[mask]
+        return frequencies[mask], magnitude_stacked[mask, :]
 
     def compute_numpy_fft(self, signal_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Simple NumPy FFT computation (for MATLAB compatibility).
+        """Simple NumPy FFT computation for each accelerometer (for MATLAB compatibility).
         
         Args:
-            signal_data: Shape (timesteps, channels)
+            signal_data: Shape (timesteps, 3) for 3 separate accelerometers
             
         Returns:
-            frequencies, magnitude_spectrum (averaged across channels)
+            frequencies: Shape (n_freqs,)
+            magnitude_spectrum: Shape (n_freqs, 3) - FFT for each accelerometer
         """
-        # Average across channels
-        if signal_data.ndim == 2:
-            averaged = np.mean(signal_data, axis=1)
-        else:
-            averaged = signal_data
-
-        # Apply window
-        window = np.hanning(len(averaged))
-        windowed = averaged * window
-
-        # Compute FFT (using real FFT)
-        fft_result = np.fft.rfft(windowed, n=self.fft_size)
-        magnitude = np.abs(fft_result)
+        if signal_data.ndim == 1:
+            # Single channel
+            signal_data = signal_data.reshape(-1, 1)
+        
+        # Compute FFT for EACH accelerometer separately
+        magnitude_list = []
+        for i in range(signal_data.shape[1]):
+            # Extract signal for this accelerometer
+            single_channel = signal_data[:, i]
+            
+            # Apply window
+            window = np.hanning(len(single_channel))
+            windowed = single_channel * window
+            
+            # Compute FFT (using real FFT)
+            fft_result = np.fft.rfft(windowed, n=self.fft_size)
+            magnitude = np.abs(fft_result)
+            magnitude_list.append(magnitude)
+        
+        # Stack magnitudes: shape (n_freqs, n_channels)
+        magnitude_stacked = np.column_stack(magnitude_list)
         frequencies = np.fft.rfftfreq(self.fft_size, d=1.0 / self.sample_rate)
 
         # Limit to frequency range
         mask = (frequencies >= self.freq_min) & (frequencies <= self.freq_max)
-        return frequencies[mask], magnitude[mask]
+        return frequencies[mask], magnitude_stacked[mask, :]
 
     def compare_methods(
         self, signal_data: np.ndarray
     ) -> Dict[str, Any]:
-        """Compare FFT methods and return correlation & MSE metrics.
+        """Compare FFT methods and return correlation & MSE metrics per accelerometer.
         
         Args:
             signal_data: Input signal
             
         Returns:
-            Dictionary with comparison metrics
+            Dictionary with comparison metrics for each accelerometer
         """
         freq_scipy, mag_scipy = self.compute_scipy_fft(signal_data)
         freq_numpy, mag_numpy = self.compute_numpy_fft(signal_data)
@@ -161,22 +187,43 @@ class FlexibleFFTProcessor:
         # Interpolate to common frequency grid
         common_freqs = freq_scipy  # Use scipy as reference
         
-        mag_numpy_interp = np.interp(common_freqs, freq_numpy, mag_numpy)
-        mag_matlab_interp = np.interp(common_freqs, freq_matlab, mag_matlab)
-
-        # Compute correlation
-        corr_numpy = float(np.corrcoef(mag_scipy, mag_numpy_interp)[0, 1])
-        corr_matlab = float(np.corrcoef(mag_scipy, mag_matlab_interp)[0, 1])
-
-        # Compute MSE
-        mse_numpy = float(np.mean((mag_scipy - mag_numpy_interp) ** 2))
-        mse_matlab = float(np.mean((mag_scipy - mag_matlab_interp) ** 2))
+        # Interpolate each accelerometer separately
+        n_accel = mag_scipy.shape[1] if mag_scipy.ndim == 2 else 1
+        corr_numpy_list = []
+        corr_matlab_list = []
+        mse_numpy_list = []
+        mse_matlab_list = []
+        
+        for i in range(n_accel):
+            if mag_scipy.ndim == 2:
+                scipy_accel = mag_scipy[:, i]
+                numpy_accel = mag_numpy[:, i]
+                matlab_accel = mag_matlab[:, i]
+            else:
+                scipy_accel = mag_scipy
+                numpy_accel = mag_numpy
+                matlab_accel = mag_matlab
+            
+            numpy_interp = np.interp(common_freqs, freq_numpy, numpy_accel)
+            matlab_interp = np.interp(common_freqs, freq_matlab, matlab_accel)
+            
+            # Compute correlation
+            corr_numpy = float(np.corrcoef(scipy_accel, numpy_interp)[0, 1])
+            corr_matlab = float(np.corrcoef(scipy_accel, matlab_interp)[0, 1])
+            corr_numpy_list.append(corr_numpy)
+            corr_matlab_list.append(corr_matlab)
+            
+            # Compute MSE
+            mse_numpy = float(np.mean((scipy_accel - numpy_interp) ** 2))
+            mse_matlab = float(np.mean((scipy_accel - matlab_interp) ** 2))
+            mse_numpy_list.append(mse_numpy)
+            mse_matlab_list.append(mse_matlab)
 
         return {
-            "correlation": {"numpy": corr_numpy, "matlab": corr_matlab},
-            "mse": {"numpy": mse_numpy, "matlab": mse_matlab},
+            "correlation": {"numpy": corr_numpy_list, "matlab": corr_matlab_list},
+            "mse": {"numpy": mse_numpy_list, "matlab": mse_matlab_list},
             "frequencies": common_freqs,
             "magnitude_scipy": mag_scipy,
-            "magnitude_numpy": mag_numpy_interp,
-            "magnitude_matlab": mag_matlab_interp,
+            "magnitude_numpy": mag_numpy,
+            "magnitude_matlab": mag_matlab,
         }

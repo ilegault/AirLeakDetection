@@ -51,21 +51,29 @@ class DataSplitter:
         Returns:
             train_indices, val_indices, test_indices
         """
+        n_samples = len(labels)
+        
+        # Calculate sizes as integers to avoid rounding issues with stratification
+        train_size = int(np.round(self.train_ratio * n_samples))
+        val_size = int(np.round(self.val_ratio * n_samples))
+        test_size = n_samples - train_size - val_size  # Ensure exact sum
+        
         # First split: train + temp (val + test)
         train_idx, temp_idx = train_test_split(
             np.arange(len(labels)),
-            train_size=self.train_ratio,
-            test_size=self.val_ratio + self.test_ratio,
+            train_size=train_size,
+            test_size=len(labels) - train_size,
             stratify=labels,
             random_state=self.random_seed,
         )
 
-        # Second split: val + test
-        val_size = self.val_ratio / (self.val_ratio + self.test_ratio)
+        # Second split: val + test from temp
+        # Calculate proportion for val within temp split
+        val_proportion = val_size / (val_size + test_size)
         val_idx, test_idx = train_test_split(
             temp_idx,
             train_size=val_size,
-            test_size=1.0 - val_size,
+            test_size=test_size,
             stratify=labels[temp_idx],
             random_state=self.random_seed,
         )

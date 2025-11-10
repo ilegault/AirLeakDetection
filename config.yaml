@@ -1,15 +1,16 @@
 data:
   raw_data_path: "data/raw"
   processed_data_path: "data/processed"
-  sample_rate: 10000
+  sample_rate: 17066  # WebDAQ actual sample rate (from CSV header)
   duration: 10
-  n_channels: 3
+  n_channels: 3  # 3 separate accelerometers (Acceleration 0, 1, 2)
 
 preprocessing:
   fft_size: 2048
   window: "hanning"
   overlap: 0.5
-  freq_max: 2000
+  freq_min: 30       # Minimum frequency (Hz)
+  freq_max: 2000     # Maximum frequency (Hz)
   normalize: true
 
 training:
