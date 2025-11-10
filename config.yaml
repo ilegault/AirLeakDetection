@@ -13,6 +13,14 @@ preprocessing:
   freq_max: 2000     # Maximum frequency (Hz)
   normalize: true
 
+  # Welch's method parameters (professor's specific settings)
+  welch:
+    num_segments: 16        # Number of segments for Welch's method
+    window_type: "hamming"  # Hamming window for better spectral leakage reduction
+    overlap_ratio: 0.5      # 50% overlap between segments
+    bandpower_freq_min: 50  # Band power minimum frequency (Hz)
+    bandpower_freq_max: 4000 # Band power maximum frequency (Hz)
+
 training:
   batch_size: 32
   epochs: 100
