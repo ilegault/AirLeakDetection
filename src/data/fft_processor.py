@@ -1,4 +1,4 @@
-"""Flexible FFT processing supporting multiple methods (MATLAB, scipy, NumPy)."""
+"""Flexible FFT processing supporting multiple methods (MATLAB, scipy, NumPy, Welch)."""
 
 from __future__ import annotations
 
@@ -168,6 +168,138 @@ class FlexibleFFTProcessor:
         # Limit to frequency range
         mask = (frequencies >= self.freq_min) & (frequencies <= self.freq_max)
         return frequencies[mask], magnitude_stacked[mask, :]
+
+    def compute_welch_psd(
+        self,
+        signal_data: np.ndarray,
+        num_segments: int = 16,
+        window_type: str = 'hamming'
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute Power Spectral Density using Welch's method for each accelerometer.
+
+        This implementation follows the professor's specific parameters:
+        - Segment length: floor(Nx / (numSegments/2 + 0.5))
+        - Hamming window (better spectral leakage reduction)
+        - 50% overlap between segments
+        - Zero-padding for better frequency resolution
+
+        Args:
+            signal_data: Shape (timesteps, 3) for 3 separate accelerometers
+            num_segments: Number of segments for Welch's method (default: 16)
+            window_type: Window type, default 'hamming' (not 'hanning')
+
+        Returns:
+            frequencies: Shape (n_freqs,)
+            psd: Shape (n_freqs, 3) - PSD for each accelerometer
+        """
+        if signal_data.ndim == 1:
+            # Single channel
+            signal_data = signal_data.reshape(-1, 1)
+
+        if signal_data.shape[1] != 3:
+            LOGGER.warning("Expected 3 accelerometers, got %d", signal_data.shape[1])
+
+        # Calculate segment length using professor's formula
+        Nx = signal_data.shape[0]
+        segment_length = int(np.floor(Nx / (num_segments / 2 + 0.5)))
+
+        # 50% overlap
+        num_overlap = segment_length // 2
+
+        # FFT points: max(256, 2^nextpow2(segmentLength))
+        nextpow2 = int(np.ceil(np.log2(segment_length)))
+        nfft = max(256, 2**nextpow2)
+
+        LOGGER.info(
+            f"Welch's method parameters: Nx={Nx}, segments={num_segments}, "
+            f"segment_length={segment_length}, overlap={num_overlap}, nfft={nfft}"
+        )
+
+        # Compute Welch PSD for EACH accelerometer separately
+        psd_list = []
+        for i in range(signal_data.shape[1]):
+            # Extract signal for this accelerometer
+            single_channel = signal_data[:, i]
+
+            # Compute Welch's PSD using scipy
+            frequencies, psd = scipy_signal.welch(
+                single_channel,
+                fs=self.sample_rate,
+                window=window_type,
+                nperseg=segment_length,
+                noverlap=num_overlap,
+                nfft=nfft,
+                scaling='density',
+                detrend='constant'
+            )
+
+            psd_list.append(psd)
+
+        # Stack PSDs: shape (n_freqs, 3)
+        psd_stacked = np.column_stack(psd_list)
+
+        # Limit to frequency range
+        mask = (frequencies >= self.freq_min) & (frequencies <= self.freq_max)
+
+        LOGGER.info(
+            f"Welch PSD computed: frequency range [{frequencies[mask][0]:.2f}, "
+            f"{frequencies[mask][-1]:.2f}] Hz, {np.sum(mask)} frequency bins"
+        )
+
+        return frequencies[mask], psd_stacked[mask, :]
+
+    def compute_bandpower_welch(
+        self,
+        signal_data: np.ndarray,
+        freq_range: Tuple[float, float] = (50.0, 4000.0),
+        num_segments: int = 16
+    ) -> np.ndarray:
+        """Calculate band power in specific frequency range using Welch's PSD.
+
+        This provides a single metric per accelerometer for ML classification.
+
+        Args:
+            signal_data: Shape (timesteps, 3) for 3 separate accelerometers
+            freq_range: Frequency range tuple (min_freq, max_freq) in Hz
+            num_segments: Number of segments for Welch's method
+
+        Returns:
+            bandpower: Shape (3,) - one value per accelerometer
+        """
+        # Compute Welch PSD
+        frequencies, psd = self.compute_welch_psd(signal_data, num_segments=num_segments)
+
+        # Calculate band power for each accelerometer
+        min_freq, max_freq = freq_range
+        freq_mask = (frequencies >= min_freq) & (frequencies <= max_freq)
+
+        if np.sum(freq_mask) == 0:
+            LOGGER.warning(
+                f"No frequencies in range [{min_freq}, {max_freq}] Hz. "
+                f"Available range: [{frequencies[0]:.2f}, {frequencies[-1]:.2f}] Hz"
+            )
+            return np.zeros(signal_data.shape[1])
+
+        # Integrate PSD over frequency band (using trapezoidal rule)
+        # Power = integral of PSD over frequency
+        bandpower_list = []
+        for i in range(psd.shape[1]):
+            # Get PSD for this accelerometer in the frequency band
+            psd_band = psd[freq_mask, i]
+            freqs_band = frequencies[freq_mask]
+
+            # Integrate using trapezoidal rule
+            power = np.trapz(psd_band, freqs_band)
+            bandpower_list.append(power)
+
+        bandpower = np.array(bandpower_list)
+
+        LOGGER.info(
+            f"Band power ({min_freq}-{max_freq} Hz): "
+            f"Accel0={bandpower[0]:.6e}, Accel1={bandpower[1]:.6e}, Accel2={bandpower[2]:.6e}"
+        )
+
+        return bandpower
 
     def compare_methods(
         self, signal_data: np.ndarray
