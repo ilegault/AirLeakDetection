@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Prepare raw data for model training.
+Prepare raw data for model training with Welch's method spectral analysis.
 
-Loads raw WebDAQ CSV files, applies preprocessing, computes FFT, and creates
-train/validation/test splits. Supports data augmentation.
+Loads raw WebDAQ CSV files, applies preprocessing, and computes:
+1. Standard FFT (for comparison)
+2. Welch Power Spectral Density (professor's parameters: 16 segments, Hamming window)
+3. Band power features 50-4000 Hz (for ML classification)
+
+Creates train/validation/test splits. Supports data augmentation.
 
 Usage:
     python scripts/prepare_data.py --raw-data data/raw/ --output-dir data/processed/
@@ -265,15 +269,25 @@ def process_signal(
     config: Dict,
     compute_fft: bool = False,
 ) -> Dict:
-    """Process a signal with preprocessing and optional FFT computation.
+    """Process a signal with preprocessing and FFT/Welch computation.
+    
+    Implements proper data treatment using Welch's method (professor's parameters):
+    - Computes Welch Power Spectral Density with 16 segments
+    - Computes band power as ML features
+    - Also computes standard FFT for comparison
     
     Args:
         signal: Input signal of shape (timesteps, 3)
         config: Configuration dictionary
-        compute_fft: Whether to compute FFT
+        compute_fft: Whether to compute FFT/Welch features
         
     Returns:
-        Dictionary with 'signal' and optionally 'fft_magnitude' and 'frequencies'
+        Dictionary with 'signal' and optionally:
+        - 'fft_magnitude': Standard FFT magnitude
+        - 'frequencies_fft': FFT frequencies
+        - 'welch_psd': Welch Power Spectral Density
+        - 'welch_frequencies': Welch frequency bins
+        - 'welch_bandpower': Band power features (3,)
     """
     logger = get_logger(__name__)
     
@@ -296,14 +310,41 @@ def process_signal(
     
     result = {"signal": detrended}
     
-    # Compute FFT if requested
+    # Compute FFT and Welch if requested
     if compute_fft:
         fft_processor = FlexibleFFTProcessor(config)
-        frequencies, fft_magnitude = fft_processor.compute_scipy_fft(detrended)
         
+        # 1. Compute standard FFT (for comparison)
+        frequencies_fft, fft_magnitude = fft_processor.compute_scipy_fft(detrended)
         result["fft_magnitude"] = fft_magnitude.astype(np.float32)
-        result["frequencies"] = frequencies.astype(np.float32)
-        logger.debug(f"Computed FFT: shape={fft_magnitude.shape}")
+        result["frequencies_fft"] = frequencies_fft.astype(np.float32)
+        logger.debug(f"  Computed FFT: shape={fft_magnitude.shape}")
+        
+        # 2. Compute Welch's PSD (professor's parameters: 16 segments, Hamming window)
+        welch_config = config.get("preprocessing", {}).get("welch", {})
+        num_segments = welch_config.get("num_segments", 16)
+        window_type = welch_config.get("window_type", "hamming")
+        
+        frequencies_welch, welch_psd = fft_processor.compute_welch_psd(
+            detrended,
+            num_segments=num_segments,
+            window_type=window_type
+        )
+        result["welch_psd"] = welch_psd.astype(np.float32)
+        result["welch_frequencies"] = frequencies_welch.astype(np.float32)
+        logger.debug(f"  Computed Welch PSD: shape={welch_psd.shape} (frequency range: {frequencies_welch[0]:.2f}-{frequencies_welch[-1]:.2f} Hz)")
+        
+        # 3. Compute band power (50-4000 Hz) for ML features
+        freq_min = welch_config.get("bandpower_freq_min", 50.0)
+        freq_max = welch_config.get("bandpower_freq_max", 4000.0)
+        
+        bandpower = fft_processor.compute_bandpower_welch(
+            detrended,
+            freq_range=(freq_min, freq_max),
+            num_segments=num_segments
+        )
+        result["welch_bandpower"] = bandpower.astype(np.float32)
+        logger.debug(f"  Computed band power ({freq_min}-{freq_max} Hz): {bandpower}")
     
     return result
 
@@ -315,9 +356,12 @@ def save_processed_sample(
     class_name: str,
     original_file: Path,
     fft_magnitude: np.ndarray = None,
-    frequencies: np.ndarray = None,
+    frequencies_fft: np.ndarray = None,
+    welch_psd: np.ndarray = None,
+    welch_frequencies: np.ndarray = None,
+    welch_bandpower: np.ndarray = None,
 ) -> None:
-    """Save processed sample to disk.
+    """Save processed sample to disk with FFT and Welch features.
     
     Args:
         output_file: Output file path (.npz)
@@ -325,18 +369,13 @@ def save_processed_sample(
         label: Class label
         class_name: Class name string
         original_file: Original file path (for reference)
-        fft_magnitude: Optional FFT magnitude
-        frequencies: Optional frequencies array
+        fft_magnitude: Optional FFT magnitude (standard)
+        frequencies_fft: Optional FFT frequencies
+        welch_psd: Optional Welch Power Spectral Density
+        welch_frequencies: Optional Welch frequency bins
+        welch_bandpower: Optional band power features
     """
     logger = get_logger(__name__)
-    
-    # Prepare metadata
-    metadata = {
-        "label": label,
-        "class_name": class_name,
-        "original_file": str(original_file),
-        "signal_shape": signal.shape,
-    }
     
     # Save as NPZ file
     save_data = {
@@ -346,11 +385,19 @@ def save_processed_sample(
         "original_file": str(original_file),
     }
     
+    # Standard FFT data
     if fft_magnitude is not None:
         save_data["fft_magnitude"] = fft_magnitude
+    if frequencies_fft is not None:
+        save_data["frequencies_fft"] = frequencies_fft
     
-    if frequencies is not None:
-        save_data["frequencies"] = frequencies
+    # Welch's method data (NEW)
+    if welch_psd is not None:
+        save_data["welch_psd"] = welch_psd
+    if welch_frequencies is not None:
+        save_data["welch_frequencies"] = welch_frequencies
+    if welch_bandpower is not None:
+        save_data["welch_bandpower"] = welch_bandpower
     
     output_file.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(str(output_file), **save_data)
@@ -516,7 +563,7 @@ def prepare_data(args) -> int:
                 output_filename = f"{original_file.stem}_processed.npz"
                 output_file = output_path / split_name / output_filename
                 
-                # Save sample
+                # Save sample (with standard FFT and Welch features)
                 save_processed_sample(
                     output_file,
                     processed["signal"],
@@ -524,7 +571,10 @@ def prepare_data(args) -> int:
                     class_name,
                     original_file,
                     fft_magnitude=processed.get("fft_magnitude"),
-                    frequencies=processed.get("frequencies"),
+                    frequencies_fft=processed.get("frequencies_fft"),
+                    welch_psd=processed.get("welch_psd"),
+                    welch_frequencies=processed.get("welch_frequencies"),
+                    welch_bandpower=processed.get("welch_bandpower"),
                 )
         
         # Save each split
@@ -568,7 +618,7 @@ def prepare_data(args) -> int:
                         aug_filename = f"{npz_file.stem}_aug{aug_num}.npz"
                         aug_file = npz_file.parent / aug_filename
                         
-                        # Save augmented sample
+                        # Save augmented sample (preserve Welch features from original)
                         save_processed_sample(
                             aug_file,
                             augmented_signal,
@@ -576,7 +626,10 @@ def prepare_data(args) -> int:
                             class_name,
                             npz_file,
                             fft_magnitude=data.get("fft_magnitude"),
-                            frequencies=data.get("frequencies"),
+                            frequencies_fft=data.get("frequencies_fft"),
+                            welch_psd=data.get("welch_psd"),
+                            welch_frequencies=data.get("welch_frequencies"),
+                            welch_bandpower=data.get("welch_bandpower"),
                         )
                 
                 except Exception as e:

@@ -82,25 +82,9 @@ Reprocessing generates NPZ files with structure:
 
 Update any code that loads FFT data to expect 3D input:
 
-### Before (WRONG - Old averaging):
-```python
-# Load data
-data = np.load('processed_sample.npz')
-fft = data['fft_magnitude']  # Shape: (237,) ← Wrong!
 
-# Model
-model.build(input_shape=(237,))  # Single channel
-```
 
-### After (CORRECT - 3 separate accelerometers):
-```python
-# Load data
-data = np.load('processed_sample.npz')
-fft = data['fft_magnitude']  # Shape: (237, 3) ✅
 
-# Model
-model.build(input_shape=(237, 3))  # 3 channels
-```
 
 ## Step 5: Train Updated Model
 
