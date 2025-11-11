@@ -121,7 +121,7 @@ class ModelTrainer:
     ) -> dict:
         """
         Train the model.
-        
+
         Args:
             X_train: Training features
             y_train: Training labels
@@ -130,22 +130,22 @@ class ModelTrainer:
             epochs: Number of epochs
             batch_size: Batch size
             verbose: Verbosity level
-            
+
         Returns:
             Training history dictionary
         """
         epochs = epochs or self.config.get("training", {}).get("epochs", 50)
         batch_size = batch_size or self.config.get("training", {}).get("batch_size", 32)
-        
+
         # Prepare data
         validation_data = None
         if X_val is not None and y_val is not None:
             validation_data = (X_val, y_val)
-        
+
         # Get callbacks
         callbacks_config = self.config.get("training", {}).get("callbacks", {})
         callbacks = get_callbacks(callbacks_config, str(self.checkpoint_dir))
-        
+
         # Train
         print(f"\nTraining {self.experiment_name}...")
         print(f"- Epochs: {epochs}")
@@ -153,7 +153,7 @@ class ModelTrainer:
         print(f"- Training samples: {len(X_train)}")
         if X_val is not None:
             print(f"- Validation samples: {len(X_val)}")
-        
+
         history = self.model.fit(
             X_train,
             y_train,
@@ -163,12 +163,77 @@ class ModelTrainer:
             callbacks=callbacks,
             verbose=verbose
         )
-        
+
         self.training_history = history.history
-        
+
         # Save training history
         self._save_history()
-        
+
+        return self.training_history
+
+    def fit(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        validation_data: Tuple[np.ndarray, np.ndarray] = None,
+        epochs: int = None,
+        batch_size: int = None,
+        callbacks: List = None,
+        verbose: int = 1
+    ) -> dict:
+        """
+        Train the model (Keras-style API).
+
+        This is an alias for train() that matches Keras API conventions.
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            validation_data: Tuple of (X_val, y_val)
+            epochs: Number of epochs
+            batch_size: Batch size
+            callbacks: List of callbacks
+            verbose: Verbosity level
+
+        Returns:
+            Training history dictionary
+        """
+        epochs = epochs or self.config.get("training", {}).get("epochs", 50)
+        batch_size = batch_size or self.config.get("training", {}).get("batch_size", 32)
+
+        # Prepare validation data
+        X_val, y_val = None, None
+        if validation_data is not None:
+            X_val, y_val = validation_data
+
+        # If callbacks are provided, use them directly
+        if callbacks is None:
+            callbacks_config = self.config.get("training", {}).get("callbacks", {})
+            callbacks = get_callbacks(callbacks_config, str(self.checkpoint_dir))
+
+        # Train
+        print(f"\nTraining {self.experiment_name}...")
+        print(f"- Epochs: {epochs}")
+        print(f"- Batch size: {batch_size}")
+        print(f"- Training samples: {len(X_train)}")
+        if X_val is not None:
+            print(f"- Validation samples: {len(X_val)}")
+
+        history = self.model.fit(
+            X_train,
+            y_train,
+            validation_data=validation_data,
+            epochs=epochs,
+            batch_size=batch_size,
+            callbacks=callbacks,
+            verbose=verbose
+        )
+
+        self.training_history = history.history
+
+        # Save training history
+        self._save_history()
+
         return self.training_history
     
     def evaluate(
@@ -233,16 +298,27 @@ class ModelTrainer:
     def save_model(self, filepath: str = None):
         """
         Save the trained model.
-        
+
         Args:
             filepath: Path to save model. If None, uses default location.
         """
         if filepath is None:
             filepath = str(self.experiment_dir / "final_model.keras")
-        
+
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
         self.model.save(filepath)
         print(f"Model saved to {filepath}")
+
+    def save_checkpoint(self, filepath: str = None):
+        """
+        Save a checkpoint of the trained model.
+
+        This is an alias for save_model() for API compatibility.
+
+        Args:
+            filepath: Path to save model. If None, uses default location.
+        """
+        self.save_model(filepath)
     
     def load_best_model(self, checkpoint_path: str = None):
         """
