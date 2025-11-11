@@ -262,52 +262,89 @@ def train_model(args):
         # Build model based on type
         logger.info(f"Building {args.model_type} model...")
 
+        # Build config for models
+        model_config = {
+            "training": {
+                "learning_rate": args.learning_rate,
+            },
+            "model": {
+                "conv_filters": [32, 64, 128],
+                "kernel_sizes": [7, 5, 3],
+                "dense_units": [256, 128],
+                "dropout_rates": [0.3, 0.3, 0.4, 0.3, 0.3],  # 5 rates: 3 conv + 2 dense
+                "cnn_2d": {
+                    "conv_filters": [32, 64, 128],
+                    "kernel_sizes": [[3, 3], [3, 3], [3, 3]],
+                    "dense_units": [256, 128],
+                    "dropout_rates": [0.3, 0.3, 0.4, 0.3, 0.3],  # 5 rates: 3 conv + 2 dense
+                },
+                "lstm": {
+                    "lstm_units": [64, 32],
+                    "dense_units": [128, 64],
+                    "dropout_rates": [0.2, 0.3, 0.3, 0.3],  # 4 rates: 2 lstm + 2 dense
+                    "bidirectional": True,
+                },
+                "random_forest": {
+                    "n_estimators": 300,
+                    "max_depth": None,
+                    "min_samples_split": 2,
+                    "min_samples_leaf": 1,
+                    "max_features": "sqrt",
+                    "random_state": 42,
+                    "n_jobs": -1,
+                },
+                "svm": {
+                    "kernel": "rbf",
+                    "C": 1.0,
+                    "gamma": "scale",
+                    "probability": True,
+                    "random_state": 42,
+                    "class_weight": None,
+                },
+            }
+        }
+
         if args.model_type == "cnn_1d":
-            builder = CNN1DBuilder()
+            builder = CNN1DBuilder(model_config)
             model = builder.build(
                 input_shape=X_train.shape[1:],
-                num_classes=num_classes,
-                conv_filters=[64, 128, 256],
-                kernel_sizes=[3, 3, 3],
-                dense_units=[128, 64]
+                n_classes=num_classes
             )
             is_deep_learning = True
 
         elif args.model_type == "cnn_2d":
-            builder = CNN2DBuilder()
-            # Reshape for 2D CNN if needed
-            if len(X_train.shape) == 2:
+            builder = CNN2DBuilder(model_config)
+            # Reshape for 2D CNN: (samples, timesteps, channels) -> (samples, timesteps, channels, 1)
+            if len(X_train.shape) == 3:
+                X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], X_train.shape[2], 1)
+                X_val = X_val.reshape(X_val.shape[0], X_val.shape[1], X_val.shape[2], 1)
+            elif len(X_train.shape) == 2:
                 X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1, 1)
                 X_val = X_val.reshape(X_val.shape[0], X_val.shape[1], 1, 1)
             model = builder.build(
                 input_shape=X_train.shape[1:],
-                num_classes=num_classes,
-                conv_filters=[32, 64, 128],
-                kernel_sizes=[(3, 3), (3, 3), (3, 3)],
-                dense_units=[128, 64]
+                n_classes=num_classes
             )
             is_deep_learning = True
 
         elif args.model_type == "lstm":
-            builder = LSTMBuilder()
+            builder = LSTMBuilder(model_config)
             # Ensure 3D shape for LSTM (samples, timesteps, features)
             if len(X_train.shape) == 2:
                 X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
                 X_val = X_val.reshape(X_val.shape[0], X_val.shape[1], 1)
             model = builder.build(
                 input_shape=X_train.shape[1:],
-                num_classes=num_classes,
-                lstm_units=[128, 64],
-                dense_units=[64]
+                n_classes=num_classes
             )
             is_deep_learning = True
 
         elif args.model_type == "random_forest":
-            model = RandomForestModel(n_estimators=300, max_depth=None, n_jobs=-1)
+            model = RandomForestModel(model_config)
             is_deep_learning = False
 
         elif args.model_type == "svm":
-            model = SVMClassifier(kernel='rbf', C=1.0)
+            model = SVMClassifier(model_config)
             is_deep_learning = False
 
         else:
@@ -317,21 +354,26 @@ def train_model(args):
         # Train model
         if is_deep_learning:
             # Use ModelTrainer for deep learning models
-            trainer = ModelTrainer(model=model, model_name=args.model_type)
+            trainer = ModelTrainer(model=model, config=model_config, experiment_name=args.model_type)
 
             # Compile model
             trainer.compile(
-                optimizer='adam',
-                learning_rate=args.learning_rate,
                 loss='sparse_categorical_crossentropy',
+                optimizer='adam',
                 metrics=['accuracy']
             )
 
             # Get callbacks
+            callbacks_config = {
+                "early_stopping": True,
+                "early_stopping_patience": 10,
+                "model_checkpoint": True,
+                "reduce_lr_on_plateau": True,
+                "reduce_lr_patience": 5,
+            }
             callbacks = get_callbacks(
-                model_dir=str(model_dir),
-                early_stopping_patience=10,
-                reduce_lr_patience=5
+                config=callbacks_config,
+                checkpoint_dir=str(model_dir / "checkpoints")
             )
 
             # Train
@@ -352,14 +394,23 @@ def train_model(args):
             # Traditional ML models
             # Flatten features if needed
             if len(X_train.shape) > 2:
-                X_train = X_train.reshape(X_train.shape[0], -1)
-                X_val = X_val.reshape(X_val.shape[0], -1)
+                X_train_flat = X_train.reshape(X_train.shape[0], -1)
+                X_val_flat = X_val.reshape(X_val.shape[0], -1)
+            else:
+                X_train_flat = X_train
+                X_val_flat = X_val
 
             logger.info("Training model...")
-            model.fit(X_train, y_train)
-
+            
+            # Train using the wrapper class's fit method
+            model.fit(X_train_flat, y_train)
+            
             # Evaluate on validation set
-            val_accuracy = model.evaluate(X_val, y_val)
+            if args.model_type == "random_forest":
+                val_accuracy, _ = model.evaluate(X_val_flat, y_val)
+            elif args.model_type == "svm":
+                val_accuracy = model.model.score(X_val_flat, y_val)
+            
             logger.info(f"Validation accuracy: {val_accuracy:.4f}")
 
             # Save model
