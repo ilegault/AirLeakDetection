@@ -22,12 +22,17 @@ preprocessing:
     bandpower_freq_max: 4000 # Band power maximum frequency (Hz)
 
 training:
-  batch_size: 32
+  batch_size: 64  # Increased for better CPU utilization (16 cores)
   epochs: 100
   learning_rate: 0.001
   validation_split: 0.15
   test_split: 0.15
   early_stopping_patience: 10
+
+  # CPU Optimization (Lenovo Legion 5 - 16 cores)
+  use_multiprocessing: true
+  workers: 8  # Half of CPU cores for data loading
+  max_queue_size: 16  # Queue size for data loading
 
 classes:
   0: "NOLEAK"
