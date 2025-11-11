@@ -29,7 +29,9 @@ os.environ['TF_NUM_INTEROP_THREADS'] = '2'  # Inter-op parallelism
 import tensorflow as tf
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent))
+# Add project root to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils import setup_logging, get_logger
 
@@ -91,7 +93,7 @@ def train_single_model(model_type: str, epochs: int = 100, batch_size: int = 64)
     try:
         result = subprocess.run(
             cmd,
-            cwd=Path(__file__).parent,
+            cwd=PROJECT_ROOT,
             env={**os.environ}  # Pass optimized environment variables
         )
         if result.returncode == 0:
@@ -212,7 +214,17 @@ def main():
     # Aggregate data if needed
     if not args.skip_aggregation:
         logger.info("\nStep 1: Aggregating data...")
-        from scripts.train_all_models import aggregate_npz_to_npy
+        # Import aggregate function from train_all_models
+        try:
+            from train_all_models import aggregate_npz_to_npy
+        except ImportError:
+            # If direct import fails, use alternative approach
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("train_all_models", PROJECT_ROOT / "scripts" / "train_all_models.py")
+            train_all_models = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(train_all_models)
+            aggregate_npz_to_npy = train_all_models.aggregate_npz_to_npy
+        
         if not aggregate_npz_to_npy("data/processed/", args.force_aggregation):
             logger.error("Data aggregation failed!")
             return 1
