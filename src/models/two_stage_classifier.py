@@ -105,14 +105,17 @@ class TwoStageClassifier:
                 Example: {0: "models/accel_0_rf.pkl", 1: "models/accel_1_rf.pkl", ...}
         """
         for accel_id, model_path in classifier_paths.items():
+            # Convert string keys to integers (handles JSON loading which converts keys to strings)
+            accel_id_int = int(accel_id)
+            
             model_path_obj = Path(model_path)
             if not model_path_obj.exists():
-                logger.warning(f"Hole size classifier not found for accelerometer {accel_id}: {model_path}")
+                logger.warning(f"Hole size classifier not found for accelerometer {accel_id_int}: {model_path}")
                 continue
 
-            logger.info(f"Loading hole size classifier for accelerometer {accel_id} from {model_path}")
-            self.hole_size_classifiers[accel_id] = joblib.load(model_path)
-            logger.info(f"  Loaded classifier for {self.accelerometer_names[accel_id]}")
+            logger.info(f"Loading hole size classifier for accelerometer {accel_id_int} from {model_path}")
+            self.hole_size_classifiers[accel_id_int] = joblib.load(model_path)
+            logger.info(f"  Loaded classifier for {self.accelerometer_names[accel_id_int]}")
 
         if not self.hole_size_classifiers:
             logger.warning("No hole size classifiers loaded!")

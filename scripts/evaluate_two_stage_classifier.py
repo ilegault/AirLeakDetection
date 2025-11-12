@@ -105,6 +105,61 @@ Examples:
     return parser
 
 
+def load_welch_bandpower_test_data(test_data_path: Path) -> tuple:
+    """Load Welch band power features from test NPZ files for all accelerometers.
+    
+    This extracts the band power feature (single value per accelerometer) that was
+    used to train the hole size classifiers.
+
+    Args:
+        test_data_path: Path to test data directory containing NPZ files
+
+    Returns:
+        (features, accel_ids, hole_size_ids) where:
+        - features: shape (n_samples, 3) - band power for each accelerometer
+        - accel_ids: shape (n_samples,) - which accelerometer the sample came from
+        - hole_size_ids: shape (n_samples,) - true hole size class
+    """
+    npz_files = sorted(test_data_path.glob("*.npz"))
+    
+    if not npz_files:
+        LOGGER.warning(f"No NPZ files found in {test_data_path}")
+        return np.array([]), np.array([]), np.array([])
+    
+    features_list = []
+    accel_ids_list = []
+    hole_size_ids_list = []
+    
+    for npz_file in npz_files:
+        try:
+            data = np.load(npz_file, allow_pickle=True)
+            
+            # Extract Welch band power (3 values - one per accelerometer)
+            if "welch_bandpower" in data:
+                bandpower = data["welch_bandpower"]
+                if len(bandpower) >= 3:
+                    features_list.append(bandpower[:3])  # Take all 3 accelerometers
+                    
+                    # Get labels
+                    if "accelerometer_id" in data:
+                        accel_ids_list.append(int(data["accelerometer_id"]))
+                    if "label" in data:
+                        hole_size_ids_list.append(int(data["label"]))
+        except Exception as e:
+            LOGGER.error(f"Failed to load {npz_file}: {e}")
+            continue
+    
+    if not features_list:
+        LOGGER.warning(f"No features extracted from {test_data_path}")
+        return np.array([]), np.array([]), np.array([])
+    
+    features = np.array(features_list, dtype=np.float32)
+    accel_ids = np.array(accel_ids_list, dtype=np.int32)
+    hole_size_ids = np.array(hole_size_ids_list, dtype=np.int32)
+    
+    return features, accel_ids, hole_size_ids
+
+
 def load_two_stage_classifier(model_dir: Path) -> TwoStageClassifier:
     """Load the two-stage classifier from directory.
 
@@ -178,27 +233,95 @@ def evaluate_two_stage_classifier(args) -> int:
         # Load classifier
         classifier = load_two_stage_classifier(model_dir)
 
-        # Load test data (accelerometer classification format)
+        # Load test data
         LOGGER.info("\nLoading test data...")
-        X_test = np.load(accel_test_data_path / "features.npy")
+        
+        # Load full features for accelerometer classifier (stage 1)
+        X_test_full = np.load(accel_test_data_path / "features.npy")
         y_accel_test = np.load(accel_test_data_path / "labels.npy")
         y_hole_test = np.load(accel_test_data_path / "hole_size_labels.npy")
-
-        LOGGER.info(f"Test data shape: {X_test.shape}")
-        LOGGER.info(f"Number of test samples: {len(X_test)}")
-
+        
         # Flatten features if needed
-        if len(X_test.shape) > 2:
-            X_test_flat = X_test.reshape(X_test.shape[0], -1)
-        else:
-            X_test_flat = X_test
+        if len(X_test_full.shape) > 2:
+            X_test_full = X_test_full.reshape(X_test_full.shape[0], -1)
+        
+        # Load band power features for hole size classifiers (stage 2)
+        X_bandpower, _, _ = load_welch_bandpower_test_data(test_data_path / "test")
+        
+        if len(X_bandpower) == 0:
+            LOGGER.error("Failed to load band power features for hole size classifiers")
+            return 1
+        
+        if len(X_test_full) != len(X_bandpower):
+            LOGGER.warning(f"Sample count mismatch: full features={len(X_test_full)}, band power={len(X_bandpower)}")
+            # Use the minimum to ensure both have same length
+            min_len = min(len(X_test_full), len(X_bandpower))
+            X_test_full = X_test_full[:min_len]
+            X_bandpower = X_bandpower[:min_len]
+            y_accel_test = y_accel_test[:min_len]
+            y_hole_test = y_hole_test[:min_len]
+        
+        LOGGER.info(f"Full features shape (for accelerometer ID): {X_test_full.shape}")
+        LOGGER.info(f"Band power shape (for hole size): {X_bandpower.shape}")
+        LOGGER.info(f"Number of test samples: {len(X_test_full)}")
 
-        # Evaluate
+        # Evaluate - need to combine both feature types
+        # Stage 1: Use full features for accelerometer identification
         LOGGER.info(f"\n{'='*60}")
         LOGGER.info("Running evaluation...")
         LOGGER.info(f"{'='*60}")
-
-        results = classifier.evaluate(X_test_flat, y_accel_test, y_hole_test)
+        
+        # Get accelerometer predictions using full features
+        pred_accel_ids = classifier.accelerometer_classifier.predict(X_test_full)
+        accel_proba = classifier.accelerometer_classifier.predict_proba(X_test_full)
+        
+        # Get hole size predictions using band power features
+        pred_hole_ids = np.zeros_like(pred_accel_ids)
+        confidences = np.zeros(len(pred_accel_ids))
+        
+        for i in range(len(pred_accel_ids)):
+            accel_id = pred_accel_ids[i]
+            
+            if accel_id in classifier.hole_size_classifiers:
+                hole_classifier = classifier.hole_size_classifiers[accel_id]
+                # Extract band power for THIS accelerometer only (shape should be 1)
+                accel_bandpower = X_bandpower[i:i+1, accel_id:accel_id+1]  # Shape (1, 1)
+                pred_hole_ids[i] = hole_classifier.predict(accel_bandpower)[0]
+                hole_proba = hole_classifier.predict_proba(accel_bandpower)[0]
+                # Combined confidence: product of both stage confidences
+                confidences[i] = float(accel_proba[i, accel_id] * hole_proba[int(pred_hole_ids[i])])
+            else:
+                pred_hole_ids[i] = -1
+                confidences[i] = 0.0
+        
+        # Calculate metrics
+        stage1_accuracy = np.mean(pred_accel_ids == y_accel_test)
+        correct_accel_mask = pred_accel_ids == y_accel_test
+        if np.sum(correct_accel_mask) > 0:
+            stage2_accuracy = np.mean(
+                pred_hole_ids[correct_accel_mask] == y_hole_test[correct_accel_mask]
+            )
+        else:
+            stage2_accuracy = 0.0
+        overall_accuracy = np.mean((pred_accel_ids == y_accel_test) & (pred_hole_ids == y_hole_test))
+        
+        per_accel_accuracy = {}
+        for accel_id in np.unique(y_accel_test):
+            mask = y_accel_test == accel_id
+            if np.sum(mask) > 0:
+                accel_correct = np.mean(
+                    (pred_accel_ids[mask] == y_accel_test[mask]) &
+                    (pred_hole_ids[mask] == y_hole_test[mask])
+                )
+                per_accel_accuracy[int(accel_id)] = float(accel_correct)
+        
+        results = {
+            'stage1_accuracy': float(stage1_accuracy),
+            'stage2_accuracy': float(stage2_accuracy),
+            'overall_accuracy': float(overall_accuracy),
+            'per_accelerometer_accuracy': per_accel_accuracy,
+            'mean_confidence': float(np.mean(confidences)),
+        }
 
         # Print results
         LOGGER.info(f"\n{'='*60}")
@@ -213,8 +336,7 @@ def evaluate_two_stage_classifier(args) -> int:
         for accel_id, acc in results['per_accelerometer_accuracy'].items():
             LOGGER.info(f"  Accelerometer {accel_id}: {acc:.4f} ({100*acc:.2f}%)")
 
-        # Get predictions for detailed analysis
-        pred_accel_ids, pred_hole_ids, confidences = classifier.predict(X_test_flat, return_confidence=True)
+        # Predictions already calculated above from evaluate section
 
         # Generate confusion matrices
         LOGGER.info(f"\n{'='*60}")
