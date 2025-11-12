@@ -22,7 +22,6 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data.data_loader import WebDAQDataLoader
-from src.data.preprocessor import SignalPreprocessor
 from src.data.fft_processor import FlexibleFFTProcessor
 
 logging.basicConfig(
@@ -295,24 +294,30 @@ def main():
         sys.exit(1)
 
     LOGGER.info(f"Loading data from {csv_path}")
-    loader = WebDAQDataLoader(config)
-    time_data, signal_data, label = loader.load(csv_path)
+    loader = WebDAQDataLoader(config_path)
+    signal_data = loader.load_sample(csv_path)
+    
+    # Infer label from file path
+    label = "unknown"
+    for class_name in loader.class_name_to_id.keys():
+        if class_name in str(csv_path):
+            label = class_name
+            break
+    
+    # Create time data
+    sample_rate = config['data']['sample_rate']
+    time_data = np.arange(signal_data.shape[0]) / sample_rate
 
     LOGGER.info(
         f"Loaded data: time shape {time_data.shape}, "
         f"signal shape {signal_data.shape}, label: {label}"
     )
 
-    # Preprocess data
-    LOGGER.info("Preprocessing signal data")
-    preprocessor = SignalPreprocessor(config)
-    processed_signal = preprocessor.preprocess(signal_data)
-
-    # Compute Welch PSD
+    # Compute Welch PSD (no preprocessing needed - done internally)
     LOGGER.info("Computing Welch Power Spectral Density")
     fft_processor = FlexibleFFTProcessor(config)
     frequencies, psd = fft_processor.compute_welch_psd(
-        processed_signal,
+        signal_data,
         num_segments=args.num_segments
     )
 
@@ -321,7 +326,7 @@ def main():
     # Compute band power
     LOGGER.info(f"Computing band power in range {args.freq_range[0]}-{args.freq_range[1]} Hz")
     bandpower = fft_processor.compute_bandpower_welch(
-        processed_signal,
+        signal_data,
         freq_range=tuple(args.freq_range),
         num_segments=args.num_segments
     )

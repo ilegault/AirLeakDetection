@@ -110,6 +110,15 @@ def evaluate_model(args):
     logger = get_logger(__name__)
     
     try:
+        # Import necessary modules first
+        import numpy as np
+        from pathlib import Path
+        from src.evaluation.metrics import ModelMetrics
+        from src.evaluation.visualizer import ResultVisualizer
+        from src.evaluation.report_generator import ReportGenerator
+        import tensorflow as tf
+        import joblib
+        
         # Validate inputs
         if not validate_inputs(args):
             return 1
@@ -124,15 +133,6 @@ def evaluate_model(args):
         logger.info(f"Generate report: {args.generate_report}")
         logger.info(f"Generate plots: {args.generate_plots}")
 
-        # Import necessary modules
-        import numpy as np
-        from pathlib import Path
-        from src.evaluation.metrics import ModelMetrics
-        from src.evaluation.visualizer import ResultVisualizer
-        from src.evaluation.report_generator import ReportGenerator
-        import tensorflow as tf
-        import joblib
-
         # Load test data
         logger.info("Loading test data...")
         test_path = Path(args.test_data)
@@ -140,7 +140,15 @@ def evaluate_model(args):
         # Try to load both signal and FFT data if available
         test_files = list(test_path.glob("*.npy"))
         if test_path.is_dir():
-            X_test = np.load(test_path / "signals.npy")
+            # Try different file names
+            if (test_path / "fft_features.npy").exists():
+                X_test = np.load(test_path / "fft_features.npy")
+            elif (test_path / "signals.npy").exists():
+                X_test = np.load(test_path / "signals.npy")
+            else:
+                logger.error(f"No test features found in {args.test_data}")
+                return 1
+            
             y_test = np.load(test_path / "labels.npy")
         else:
             logger.error(f"Test data directory not found: {args.test_data}")
@@ -157,13 +165,27 @@ def evaluate_model(args):
             # Deep learning model
             model = tf.keras.models.load_model(str(model_path_obj))
             is_deep_learning = True
+            scaler = None
         elif model_path_obj.suffix in ['.pkl', '.joblib']:
             # Traditional ML model
-            model = joblib.load(str(model_path_obj))
+            loaded_obj = joblib.load(str(model_path_obj))
             is_deep_learning = False
+            
+            # Handle dict format (with scaler) or direct model
+            if isinstance(loaded_obj, dict):
+                model = loaded_obj.get('model', loaded_obj)
+                scaler = loaded_obj.get('scaler', None)
+            else:
+                model = loaded_obj
+                scaler = None
+            
             # Flatten features for traditional ML
             if len(X_test.shape) > 2:
                 X_test = X_test.reshape(X_test.shape[0], -1)
+            
+            # Apply scaler if available
+            if scaler is not None:
+                X_test = scaler.transform(X_test)
         else:
             logger.error(f"Unsupported model format: {model_path_obj.suffix}")
             return 1
@@ -230,20 +252,12 @@ def evaluate_model(args):
             # Confusion matrix plot
             cm_path = output_path / "confusion_matrix.png"
             visualizer.plot_confusion_matrix(
-                conf_matrix,
+                y_test,
+                y_pred,
                 class_names=[f"Class {i}" for i in range(len(conf_matrix))],
                 save_path=str(cm_path)
             )
             logger.info(f"Confusion matrix saved to {cm_path}")
-
-            # Class distribution plot
-            dist_path = output_path / "class_distribution.png"
-            visualizer.plot_class_distribution(
-                y_test,
-                class_names=[f"Class {i}" for i in range(len(np.unique(y_test)))],
-                save_path=str(dist_path)
-            )
-            logger.info(f"Class distribution saved to {dist_path}")
 
         # Generate report if requested
         if args.generate_report:
