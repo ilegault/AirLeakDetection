@@ -374,7 +374,7 @@ def main():
 
     # Load two-stage classifier
     LOGGER.info("\nLoading two-stage classifier...")
-    two_stage = TwoStageClassifier.load_from_config(str(config_path))
+    two_stage = TwoStageClassifier.from_config(str(config_path))
 
     # Load test data
     features_list, hole_size_labels, npz_files = load_test_data(
