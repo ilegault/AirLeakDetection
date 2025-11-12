@@ -7,10 +7,24 @@ A machine learning system to detect and classify air leaks using accelerometer d
 This project builds a complete ML pipeline for detecting and classifying air leaks in 4 categories:
 - **No Leak** - Normal operation
 - **1/16" leak** - Small hole
-- **3/32" leak** - Medium hole  
+- **3/32" leak** - Medium hole
 - **1/8" leak** - Large hole
 
-The system supports accelerometer data from WebDAQ sensors (9 channels: 3 accelerometers × 3 axes) and integrates with both external MATLAB FFT processing and internal NumPy/SciPy FFT implementations.
+## Sensor Configuration
+
+The system uses **3 single-axis accelerometers** mounted at different distances along the pipe:
+- **Accelerometer 0**: Closest to the leak source
+- **Accelerometer 1**: Middle position
+- **Accelerometer 2**: Farthest from the leak source
+
+**Important**: These are NOT 3-axis accelerometers - each sensor measures acceleration in a single direction. The data has 3 channels corresponding to the 3 separate sensor positions.
+
+The WebDAQ system records data with column headers:
+- `Acceleration 0` - Closest accelerometer
+- `Acceleration 1` - Middle accelerometer
+- `Acceleration 2` - Farthest accelerometer
+
+The system integrates with both external MATLAB FFT processing and internal NumPy/SciPy FFT implementations, processing each accelerometer channel independently.
 
 ## 🚀 Phased Implementation
 
