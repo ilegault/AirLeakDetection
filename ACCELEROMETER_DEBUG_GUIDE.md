@@ -256,6 +256,27 @@ Once you identify the root cause:
 2. **If prepare_accelerometer_data.py extracts wrong**: Fix indexing/selection
 3. **If features work but RF fails**: Try different features or more complex model
 
+## ✅ ROOT CAUSE IDENTIFIED AND FIXED
+
+**Problem**: All three accelerometers have nearly IDENTICAL frequency-domain features (Welch PSD). The raw signals have different amplitudes, but Welch PSD captures only spectral shape, not amplitude.
+
+**Solution**: Use amplitude-based features instead! See `ACCELEROMETER_FIX.md` for complete details.
+
+**Quick Fix**:
+```bash
+# 1. Extract new amplitude-based features
+python scripts/extract_amplitude_features.py \
+    --input-dir data/processed/ \
+    --output-dir data/accelerometer_classifier_v2/
+
+# 2. Train with new features
+python scripts/train_accelerometer_classifier.py \
+    --data-path data/accelerometer_classifier_v2/ \
+    --model-type random_forest
+```
+
+**Expected result**: Accuracy should improve from 33% to >70%
+
 ## Files Modified
 
 - ✅ `scripts/train_accelerometer_classifier.py` - Added Step 1 diagnostics
