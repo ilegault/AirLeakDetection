@@ -143,6 +143,26 @@ def load_data_for_accelerometer(
     features_list = []
     labels_list = []
 
+    # STEP 2 DIAGNOSTICS: Check first NPZ file
+    if npz_files:
+        LOGGER.info(f"\n{'='*60}")
+        LOGGER.info(f"STEP 2: FEATURE EXTRACTION DIAGNOSTICS (Accelerometer {accel_id})")
+        LOGGER.info(f"{'='*60}")
+        first_file = npz_files[0]
+        LOGGER.info(f"Inspecting first NPZ file: {first_file.name}")
+
+        data = np.load(first_file, allow_pickle=True)
+        LOGGER.info(f"Keys available in NPZ file: {list(data.keys())}")
+
+        for key in data.keys():
+            if key != "label":
+                value = data[key]
+                LOGGER.info(f"  {key}: shape={getattr(value, 'shape', 'N/A')}, dtype={getattr(value, 'dtype', type(value))}")
+                if hasattr(value, '__len__') and len(value) >= 3:
+                    LOGGER.info(f"    Values for all 3 accelerometers: {value[:3] if len(value) == 3 else 'shape mismatch'}")
+                    if accel_id < len(value):
+                        LOGGER.info(f"    Value for accelerometer {accel_id}: {value[accel_id]}")
+
     for npz_file in npz_files:
         try:
             data = np.load(npz_file, allow_pickle=True)
@@ -189,6 +209,16 @@ def load_data_for_accelerometer(
 
     features = np.array(features_list, dtype=np.float32)
     labels = np.array(labels_list, dtype=np.int32)
+
+    # STEP 2 DIAGNOSTICS: Print extraction summary
+    LOGGER.info(f"\nExtraction summary for accelerometer {accel_id}:")
+    LOGGER.info(f"  Total files processed: {len(npz_files)}")
+    LOGGER.info(f"  Features extracted: {len(features_list)}")
+    LOGGER.info(f"  Final feature shape: {features.shape}")
+    LOGGER.info(f"  Feature mean: {np.mean(features):.6f}")
+    LOGGER.info(f"  Feature std: {np.std(features):.6f}")
+    LOGGER.info(f"  Feature min: {np.min(features):.6f}")
+    LOGGER.info(f"  Feature max: {np.max(features):.6f}")
 
     return features, labels
 

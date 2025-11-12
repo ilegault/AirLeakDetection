@@ -129,6 +129,50 @@ def train_accelerometer_classifier(args) -> int:
         LOGGER.info(f"Validation data shape: {X_val.shape}")
         LOGGER.info(f"Number of classes: {len(np.unique(y_train))}")
 
+        # STEP 1 DIAGNOSTICS: Print unique labels
+        LOGGER.info(f"\n{'='*60}")
+        LOGGER.info("STEP 1: DATA LOADING DIAGNOSTICS")
+        LOGGER.info(f"{'='*60}")
+        LOGGER.info(f"Unique labels in training set: {np.unique(y_train)}")
+        LOGGER.info(f"Unique labels in validation set: {np.unique(y_val)}")
+
+        # Check for all zeros in features
+        train_all_zeros = np.all(X_train == 0)
+        val_all_zeros = np.all(X_val == 0)
+        LOGGER.info(f"Training features all zeros: {train_all_zeros}")
+        LOGGER.info(f"Validation features all zeros: {val_all_zeros}")
+
+        # Print sample features for each accelerometer
+        LOGGER.info(f"\nSample features for first 3 samples of each accelerometer:")
+        for accel_id in range(3):
+            mask = y_train == accel_id
+            if np.any(mask):
+                samples = X_train[mask][:3]
+                LOGGER.info(f"\nAccelerometer {accel_id}:")
+                LOGGER.info(f"  Shape: {samples.shape}")
+                LOGGER.info(f"  Mean: {np.mean(samples):.6f}")
+                LOGGER.info(f"  Std: {np.std(samples):.6f}")
+                LOGGER.info(f"  Min: {np.min(samples):.6f}")
+                LOGGER.info(f"  Max: {np.max(samples):.6f}")
+                LOGGER.info(f"  First sample (first 10 values): {samples[0].flatten()[:10]}")
+
+        # Check if features are identical across accelerometers
+        LOGGER.info(f"\n{'='*60}")
+        LOGGER.info("Checking for feature differences between accelerometers...")
+        LOGGER.info(f"{'='*60}")
+        for i in range(3):
+            for j in range(i+1, 3):
+                mask_i = y_train == i
+                mask_j = y_train == j
+                if np.any(mask_i) and np.any(mask_j):
+                    mean_i = np.mean(X_train[mask_i])
+                    mean_j = np.mean(X_train[mask_j])
+                    std_i = np.std(X_train[mask_i])
+                    std_j = np.std(X_train[mask_j])
+                    LOGGER.info(f"Accel {i} vs Accel {j}:")
+                    LOGGER.info(f"  Mean difference: {abs(mean_i - mean_j):.6f}")
+                    LOGGER.info(f"  Std difference: {abs(std_i - std_j):.6f}")
+
         # Check class distribution
         unique, counts = np.unique(y_train, return_counts=True)
         LOGGER.info("\nTraining set accelerometer distribution:")
