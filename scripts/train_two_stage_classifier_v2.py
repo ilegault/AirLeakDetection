@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
 """
-Train a two-stage classifier (v2) using amplitude-based features.
+Train a two-stage classifier (v2) using amplitude-based features for multi-accelerometer arrays.
 
-Stage 1: Identify which accelerometer using amplitude features
-Stage 2: Predict hole size using the identified accelerometer's data
+Multi-Accelerometer Setup:
+    Each measurement contains simultaneous recordings from 3 accelerometers at different
+    positions (closest, middle, farthest from leak sources).
 
-This version properly uses amplitude-based features for both stages.
+Training Process:
+    Stage 1: Train position classifier using amplitude features
+             - Identifies which position (0, 1, 2) is closest to leak source
+             - Uses pre-trained accelerometer classifier from train_accelerometer_classifier.py
+
+    Stage 2: Train position-specific hole size classifiers
+             - One classifier per position (0, 1, 2)
+             - Each trained on data from that specific position
+             - Predicts leak size: NOLEAK, 1/16", 3/32", 1/8"
+
+This version uses amplitude-based features (mean, std, peak, RMS, etc.) for both stages.
 
 Usage:
     python scripts/train_two_stage_classifier_v2.py \\

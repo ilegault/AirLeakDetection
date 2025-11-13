@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """
-Train a classifier to distinguish between the 3 accelerometers.
+Train Stage 1 classifier for multi-accelerometer position identification.
 
-This script trains models (Random Forest, SVM, etc.) to identify which
-accelerometer (0, 1, or 2) a given sample came from.
+This script trains models (Random Forest, SVM, etc.) to identify which accelerometer
+position (0, 1, or 2) is closest to a leak source. This is Stage 1 of the two-stage
+leak detection system.
+
+Multi-Accelerometer Setup:
+    - 3 accelerometers record simultaneously at different positions
+    - Position 0: Closest to leak source (strongest signal)
+    - Position 1: Middle distance
+    - Position 2: Farthest from leak source
+
+The trained classifier learns to identify which position has characteristics indicating
+it's closest to the leak (e.g., highest signal amplitude, specific frequency patterns).
 
 Usage:
     python scripts/train_accelerometer_classifier.py --data-path data/accelerometer_classifier/ --model-type random_forest
