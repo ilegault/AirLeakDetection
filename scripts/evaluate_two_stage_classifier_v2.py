@@ -255,8 +255,7 @@ def evaluate_two_stage_classifier(
     """Evaluate two-stage classifier and generate comprehensive report.
 
     Each sample in features_list contains data from all 3 accelerometers (shape: 3, n_features).
-    The evaluation determines which accelerometer is closest to the leak (strongest signal),
-    then evaluates the two-stage classifier's predictions.
+    The evaluation tests ALL 3 accelerometers from each sample to get balanced position coverage.
 
     Args:
         two_stage: Trained TwoStageClassifier instance
@@ -269,38 +268,37 @@ def evaluate_two_stage_classifier(
     """
     n_samples = len(features_list)
 
-    # Arrays to store predictions
+    # Arrays to store predictions - we'll test all 3 accelerometers per sample
     true_accel = []
     pred_accel = []
     pred_hole_size = []
+    true_hole_size = []
 
-    LOGGER.info(f"\nMaking predictions on {n_samples} samples...")
+    LOGGER.info(f"\nMaking predictions on {n_samples} samples (testing all 3 accelerometers per sample)...")
+    LOGGER.info(f"Total predictions: {n_samples * 3}")
 
     for i, features_3accel in enumerate(features_list, 1):
         if i % max(1, n_samples // 10) == 0:
             LOGGER.info(f"  Progress: {i}/{n_samples}")
 
-        # Determine which accelerometer has the strongest signal
-        # This is our "true" accelerometer (closest to the leak source)
-        signal_strengths = np.mean(features_3accel, axis=1)
-        true_accel_idx = np.argmax(signal_strengths)
-        true_accel.append(true_accel_idx)
+        # Test ALL 3 accelerometers from this sample
+        for accel_id in range(3):
+            # Get features for this specific accelerometer
+            accel_features = features_3accel[accel_id, :]
 
-        # Use the strongest signal's features for prediction
-        # The TwoStageClassifier will predict both accelerometer ID and hole size
-        strongest_features = features_3accel[true_accel_idx, :]
-        prediction = two_stage.predict_single(strongest_features)
+            # Run through the two-stage classifier
+            prediction = two_stage.predict_single(accel_features)
 
-        # Extract predictions
-        accel_pred = prediction['accelerometer_id']
-        hole_pred = prediction['hole_size_id']
-
-        pred_accel.append(accel_pred)
-        pred_hole_size.append(hole_pred)
+            # Store results
+            true_accel.append(accel_id)  # Ground truth: this is position accel_id
+            pred_accel.append(prediction['accelerometer_id'])
+            pred_hole_size.append(prediction['hole_size_id'])
+            true_hole_size.append(hole_size_labels[i - 1])
 
     true_accel = np.array(true_accel)
     pred_accel = np.array(pred_accel)
     pred_hole_size = np.array(pred_hole_size)
+    true_hole_size = np.array(true_hole_size)
 
     # Stage 1 evaluation
     LOGGER.info(f"\n{'='*80}")
@@ -321,10 +319,10 @@ def evaluate_two_stage_classifier(
     LOGGER.info("STAGE 2: HOLE SIZE CLASSIFICATION")
     LOGGER.info(f"{'='*80}")
 
-    stage2_accuracy = accuracy_score(hole_size_labels, pred_hole_size)
+    stage2_accuracy = accuracy_score(true_hole_size, pred_hole_size)
     LOGGER.info(f"Stage 2 Accuracy: {stage2_accuracy:.4f} ({100*stage2_accuracy:.2f}%)")
 
-    stage2_cm = confusion_matrix(hole_size_labels, pred_hole_size)
+    stage2_cm = confusion_matrix(true_hole_size, pred_hole_size)
     LOGGER.info(f"\nStage 2 Confusion Matrix:")
     LOGGER.info(f"{stage2_cm}")
 
@@ -343,7 +341,7 @@ def evaluate_two_stage_classifier(
     LOGGER.info("CLASSIFICATION REPORT (End-to-End)")
     LOGGER.info(f"{'='*80}")
     class_names = ['NOLEAK', '1/16"', '3/32"', '1/8"']
-    report = classification_report(hole_size_labels, pred_hole_size, target_names=class_names)
+    report = classification_report(true_hole_size, pred_hole_size, target_names=class_names)
     LOGGER.info(f"\n{report}")
 
     # Per-accelerometer performance
@@ -355,7 +353,7 @@ def evaluate_two_stage_classifier(
     for accel_id in range(3):
         mask = pred_accel == accel_id
         if np.any(mask):
-            accel_accuracy = accuracy_score(hole_size_labels[mask], pred_hole_size[mask])
+            accel_accuracy = accuracy_score(true_hole_size[mask], pred_hole_size[mask])
             n_samples_accel = np.sum(mask)
 
             per_accel_stats[f'accel_{accel_id}'] = {
@@ -379,7 +377,9 @@ def evaluate_two_stage_classifier(
         },
         'end_to_end': {
             'accuracy': float(stage2_accuracy),
-            'total_samples': int(n_samples)
+            'total_samples': int(len(pred_hole_size)),
+            'test_npz_files': int(n_samples),
+            'note': 'Each NPZ file contains 3 accelerometers, all tested separately'
         },
         'per_accelerometer': per_accel_stats
     }
