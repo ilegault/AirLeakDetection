@@ -157,7 +157,7 @@ python scripts/cross_validate.py \
 
 ### 9. **export_model.py** - Model Export
 ```bash
-python scripts/export_model.py \
+python scripts/export_air_leak_models.py \
     --model-path models/best_model.h5 \
     --format tflite \
     --output-dir deployment/models/
@@ -255,7 +255,7 @@ python scripts/benchmark.py \
     --test-data data/processed/test/
 
 # Export for deployment
-python scripts/export_model.py \
+python scripts/export_air_leak_models.py \
     --model-path models/best_model.h5 \
     --format tflite \
     --output-dir deployment/models/
@@ -411,7 +411,7 @@ Scripts are implemented incrementally:
 2. ✅ Phase 8b: Data preparation (prepare_data.py)
 3. ✅ Phase 8c: Evaluation (evaluate.py, predict.py)
 4. ✅ Phase 8d: Advanced (cross_validate.py, hyperparameter_search.py)
-5. ✅ Phase 8e: Deployment (export_model.py, benchmark.py)
+5. ✅ Phase 8e: Deployment (export_air_leak_models.py, benchmark.py)
 6. ✅ Phase 8f: MATLAB integration (train_with_external_fft.py, compare_fft_methods.py)
 7. ✅ Phase 8g: Testing (test_scripts_phase8.py)
 

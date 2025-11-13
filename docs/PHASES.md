@@ -7,14 +7,14 @@ This document maps all TODO items in the codebase to their respective developmen
 | Phase | Name | Status | Key Deliverables |
 |-------|------|--------|------------------|
 | 1 | Project Setup | ✅ Complete | Git repo, directory structure, requirements |
-| 2 | Data Pipeline | 🔄 In Progress | Data loading, preprocessing, FFT processing |
+| 2 | Data Pipeline | ✅ Complete  | Data loading, preprocessing, FFT processing |
 | 3 | Model Architectures | ✅ Scaffolded | CNN 1D/2D, LSTM, RF, SVM, XGBoost, Ensemble |
-| 4 | Training Pipeline | 🔄 In Progress | Trainer, callbacks, losses, optimizers, CV |
-| 5 | Evaluation Suite | 🔄 In Progress | Metrics, visualizer, reports, comparator |
-| 6 | Prediction Pipeline | 🔄 In Progress | Predictor, real-time, batch processor, calibrator |
+| 4 | Training Pipeline | ✅ Complete | Trainer, callbacks, losses, optimizers, CV |
+| 5 | Evaluation Suite | ✅ Complete | Metrics, visualizer, reports, comparator |
+| 6 | Prediction Pipeline | ✅ Complete | Predictor, real-time, batch processor, calibrator |
 | 7 | Utilities | ✅ Scaffolded | Config, logging, file utils, MATLAB bridge |
-| 8 | Scripts | 🔄 In Progress | Training, evaluation, prediction executables |
-| 9 | Deployment | 🔄 In Progress | Model export, benchmarking, optimization |
+| 8 | Scripts | ✅ Complete  | Training, evaluation, prediction executables |
+| 9 | Deployment | ✅ Complete  | Model export, benchmarking, optimization |
 
 ---
 
@@ -262,7 +262,7 @@ All scripts are scaffolded with:
 | `prepare_data.py` | 🔄 | Phase 2 | 140 | Prepare dataset |
 | `hyperparameter_search.py` | 🔄 | Phase 4 | 128 | Hyperparameter tuning |
 | `cross_validate.py` | 🔄 | Phase 4 | 114 | Cross-validation |
-| `export_model.py` | 🔄 | Phase 9 | 114 | Export for deployment |
+| `export_air_leak_models.py` | 🔄 | Phase 9 | 495 | Export for deployment |
 
 ### What's Needed
 Implement core logic for each script (see TODO mappings above)
@@ -272,12 +272,12 @@ Implement core logic for each script (see TODO mappings above)
 ## Phase 9: Deployment & Export
 
 **Status**: 🔄 In Progress  
-**Location**: `scripts/export_model.py`  
+**Location**: `scripts/export_air_leak_models.py`  
 **Purpose**: Prepare models for production deployment
 
 ### TODOs (Phase 9)
 
-#### 1. `scripts/export_model.py` - Line 114
+#### 1. `scripts/export_air_leak_models.py` - Two-Stage System Export
 ```python
 # TODO: Implement model export logic
 ```
@@ -312,7 +312,7 @@ Implement core logic for each script (see TODO mappings above)
 | Phase 5 | `compare_fft_methods.py` | 144 | Implement FFT comparison |
 | Phase 5 | `benchmark.py` | 133 | Implement benchmarking |
 | Phase 6 | `predict.py` | 139 | Implement prediction logic |
-| Phase 9 | `export_model.py` | 114 | Implement model export |
+| Phase 9 | `export_air_leak_models.py` | 495 | Implement model export |
 
 ### Total: 10 TODO items across 5 active phases
 

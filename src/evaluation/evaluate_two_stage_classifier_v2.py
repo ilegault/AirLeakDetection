@@ -26,7 +26,7 @@ Usage:
     python scripts/evaluate_two_stage_classifier_v2.py \\
         --config models/two_stage_classifier_v2/model_*/two_stage_config.json \\
         --hole-size-data data/processed/ \\
-        --output-dir results/two_stage_classifier/
+        --output-dir results/two_stage_classifier_v2/
 """
 
 import argparse
@@ -77,7 +77,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="results/two_stage_classifier/",
+        default="results/two_stage_classifier_v2/",
         help="Output directory for results"
     )
 

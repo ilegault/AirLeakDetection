@@ -81,7 +81,7 @@
 - **Test Coverage:** 4 tests
 - **Status:** ✅ Functional
 
-#### ✅ `scripts/export_model.py`
+#### ✅ `scripts/export_air_leak_models.py`
 - **Purpose:** Model export for deployment
 - **Features:**
   - TensorFlow Lite export
@@ -404,7 +404,7 @@ python scripts/export_model.py \
 
 ### Phase 6 (Prediction)
 - `predict.py` → `src/prediction/predictor.py`, `src/prediction/batch_processor.py`
-- `export_model.py` → `src/prediction/` (model export)
+- `export_air_leak_models.py` → `src/prediction/` (model export)
 - `benchmark.py` → Performance measurement
 
 ### Phase 7 (Utilities)
@@ -425,7 +425,7 @@ scripts/
 ├── evaluate.py                      # ✅ 140 lines
 ├── cross_validate.py                # ✅ 130 lines
 ├── hyperparameter_search.py         # ✅ 140 lines
-├── export_model.py                  # ✅ 150 lines
+├── export_air_leak_models.py        # ✅ 495 lines
 ├── benchmark.py                     # ✅ 160 lines
 ├── train_with_external_fft.py       # ✅ 150 lines
 └── compare_fft_methods.py           # ✅ 160 lines

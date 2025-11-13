@@ -122,8 +122,8 @@ After extracting new features, verify they're different:
 import numpy as np
 
 # Load features
-X_train = np.load('data/accelerometer_classifier_v2/train/features.npy')
-y_train = np.load('data/accelerometer_classifier_v2/train/labels.npy')
+X_train = np.load('../data/accelerometer_classifier_v2/train/features.npy')
+y_train = np.load('../data/accelerometer_classifier_v2/train/labels.npy')
 
 # Check first feature (RMS) for each accelerometer
 for accel_id in range(3):

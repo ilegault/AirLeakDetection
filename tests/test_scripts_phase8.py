@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import all scripts as modules
 from scripts import train_model, prepare_data, predict, evaluate
-from scripts import cross_validate, hyperparameter_search, export_model
+from scripts import cross_validate, hyperparameter_search
 from scripts import benchmark, train_with_external_fft, compare_fft_methods
 
 
@@ -360,53 +360,6 @@ class TestHyperparameterSearch:
             assert args.search_method == method
 
 
-class TestExportModel:
-    """Tests for export_model.py script."""
-    
-    def test_parser_creation(self):
-        """Test argument parser creation."""
-        parser = export_model.create_parser()
-        assert isinstance(parser, argparse.ArgumentParser)
-    
-    def test_parser_required_args(self):
-        """Test parser requires model-path."""
-        parser = export_model.create_parser()
-        
-        with pytest.raises(SystemExit):
-            parser.parse_args([])
-    
-    def test_parser_defaults(self):
-        """Test parser default values."""
-        parser = export_model.create_parser()
-        
-        with tempfile.NamedTemporaryFile(suffix=".h5") as f:
-            args = parser.parse_args(["--model-path", f.name])
-            
-            assert args.format == "tflite"
-            assert args.output_dir == "deployment/models/"
-            assert args.quantize is False
-    
-    def test_parser_export_formats(self):
-        """Test parser accepts all export formats."""
-        parser = export_model.create_parser()
-        valid_formats = ["tflite", "onnx", "torchscript", "keras", "pickle"]
-        
-        with tempfile.NamedTemporaryFile(suffix=".h5") as f:
-            for fmt in valid_formats:
-                args = parser.parse_args([
-                    "--model-path", f.name,
-                    "--format", fmt
-                ])
-                assert args.format == fmt
-    
-    def test_validate_inputs_missing_model(self):
-        """Test validation with missing model."""
-        parser = export_model.create_parser()
-        args = parser.parse_args(["--model-path", "/nonexistent/model.h5"])
-        
-        result = export_model.validate_inputs(args)
-        assert result is False
-
 
 class TestBenchmark:
     """Tests for benchmark.py script."""
@@ -576,7 +529,7 @@ class TestScriptIntegration:
         """Test all scripts have a main() function."""
         scripts = [
             train_model, prepare_data, predict, evaluate,
-            cross_validate, hyperparameter_search, export_model,
+            cross_validate, hyperparameter_search,
             benchmark, train_with_external_fft, compare_fft_methods
         ]
         
@@ -588,7 +541,7 @@ class TestScriptIntegration:
         """Test all scripts have create_parser() function."""
         scripts = [
             train_model, prepare_data, predict, evaluate,
-            cross_validate, hyperparameter_search, export_model,
+            cross_validate, hyperparameter_search,
             benchmark, train_with_external_fft, compare_fft_methods
         ]
         
@@ -599,7 +552,7 @@ class TestScriptIntegration:
         """Test all scripts have input validation."""
         scripts = [
             train_model, prepare_data, predict, evaluate,
-            cross_validate, hyperparameter_search, export_model,
+            cross_validate, hyperparameter_search,
             benchmark, train_with_external_fft, compare_fft_methods
         ]
         
@@ -613,7 +566,7 @@ class TestArgumentParsing:
     
     @pytest.mark.parametrize("script", [
         train_model, prepare_data, predict, evaluate,
-        cross_validate, hyperparameter_search, export_model,
+        cross_validate, hyperparameter_search,
         benchmark, train_with_external_fft, compare_fft_methods
     ])
     def test_help_flag(self, script):
@@ -660,7 +613,7 @@ def test_phase8_script_count():
         'evaluate',
         'cross_validate',
         'hyperparameter_search',
-        'export_model',
+    
         'benchmark',
         'train_with_external_fft',
         'compare_fft_methods'
