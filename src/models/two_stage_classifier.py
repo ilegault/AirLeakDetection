@@ -1,12 +1,19 @@
 """
-Two-stage classifier that combines accelerometer identification and hole size detection.
+Two-stage classifier for leak detection in multi-accelerometer arrays.
 
-Stage 1: Identifies which accelerometer (0, 1, 2) the sample is from
-Stage 2: Uses accelerometer-specific hole size classifier to predict leak size
+Multi-Accelerometer Array Setup:
+    Each measurement is recorded simultaneously by 3 accelerometers positioned at
+    different distances from potential leak sources (closest, middle, farthest).
 
-This enables the system to:
-1. Determine which sensor the measurement came from
-2. Apply the optimal leak detection model for that specific sensor position
+Two-Stage Classification:
+    Stage 1: Identifies which accelerometer is closest to the leak source
+             (i.e., which position 0, 1, or 2 has the strongest signal)
+    Stage 2: Uses position-specific hole size classifier to predict leak size
+
+This approach enables the system to:
+1. Automatically identify the optimal sensor for leak detection (closest to source)
+2. Apply specialized leak classification models tuned for each sensor position
+3. Improve accuracy by accounting for signal strength variations with distance
 """
 
 from __future__ import annotations
@@ -23,24 +30,27 @@ logger = logging.getLogger(__name__)
 
 
 class TwoStageClassifier:
-    """Two-stage classifier for accelerometer identification and leak detection.
+    """Two-stage classifier for leak detection in multi-accelerometer arrays.
+
+    This classifier processes measurements from 3 accelerometers recording simultaneously
+    at different positions (closest, middle, farthest from leak sources).
 
     Architecture:
-        Input Signal
+        Multi-Accelerometer Input (3 sensors, simultaneous recording)
             ↓
-        [Stage 1: Accelerometer Classifier]
+        [Stage 1: Identify Closest Accelerometer]
             ↓
-        Accelerometer ID (0, 1, or 2)
+        Position ID (0=closest, 1=middle, 2=farthest)
             ↓
-        [Stage 2: Hole Size Classifier (per accelerometer)]
+        [Stage 2: Position-Specific Hole Size Classifier]
             ↓
         Hole Size Prediction (NOLEAK, 1_16, 3_32, 1_8)
 
     Attributes:
-        accelerometer_classifier: Model to identify accelerometer (0, 1, 2)
-        hole_size_classifiers: Dict mapping accelerometer_id -> hole size classifier
-        class_names: Dict mapping class id -> class name for hole sizes
-        accelerometer_names: Dict mapping accelerometer id -> name
+        accelerometer_classifier: Model to identify which position is closest to leak (0, 1, 2)
+        hole_size_classifiers: Dict mapping position_id -> hole size classifier
+        class_names: Dict mapping hole size class id -> name (0=NOLEAK, 1=1_16, 2=3_32, 3=1_8)
+        accelerometer_names: Dict mapping position id -> descriptive name
     """
 
     def __init__(
@@ -52,9 +62,12 @@ class TwoStageClassifier:
         """Initialize the two-stage classifier.
 
         Args:
-            accelerometer_classifier_path: Path to saved accelerometer classifier (.pkl)
-            hole_size_classifier_paths: Dict mapping accelerometer_id -> classifier path
-                Example: {0: "models/accel_0_rf.pkl", 1: "models/accel_1_rf.pkl", ...}
+            accelerometer_classifier_path: Path to saved position classifier (.pkl)
+                This classifier identifies which accelerometer position (0, 1, 2) is
+                closest to the leak source based on signal features.
+            hole_size_classifier_paths: Dict mapping position_id -> hole size classifier path
+                Example: {0: "models/pos_0_rf.pkl", 1: "models/pos_1_rf.pkl", 2: "models/pos_2_rf.pkl"}
+                Each classifier is trained on data from that specific sensor position.
             class_names: Dict mapping hole size class id -> name
                 Example: {0: "NOLEAK", 1: "1_16", 2: "3_32", 3: "1_8"}
         """

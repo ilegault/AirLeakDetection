@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-Prepare data for accelerometer classification training.
+Prepare data for multi-accelerometer position classification training.
 
-This script creates a dataset where each sample from a single accelerometer is
-labeled with the accelerometer ID (0, 1, or 2). This allows training a classifier
-to distinguish between the 3 different accelerometers.
+This script creates a dataset for training Stage 1 of the two-stage classifier.
+Each NPZ file contains simultaneous recordings from 3 accelerometers at different
+positions. This script separates them and labels each by position (0, 1, 2).
 
-Input: Processed NPZ files (from prepare_data.py) with shape (timesteps, 3)
-Output: Individual accelerometer samples with labels 0, 1, 2
+Data Flow:
+    Input: NPZ files with shape (timesteps, 3) - 3 simultaneous accelerometer recordings
+    Process: Extract each accelerometer's data separately
+    Output: Individual position samples labeled 0, 1, 2
+
+The trained classifier will later identify which accelerometer position (0, 1, 2)
+is closest to a leak source based on signal characteristics.
 
 Usage:
     python scripts/prepare_accelerometer_data.py --input-dir data/processed/ --output-dir data/accelerometer_classifier/
@@ -136,19 +141,23 @@ def extract_accelerometer_samples(
     use_welch: bool = True,
     use_bandpower: bool = True
 ) -> List[Dict]:
-    """Extract individual accelerometer samples from an NPZ file.
+    """Extract individual accelerometer position samples from an NPZ file.
+
+    Each NPZ file contains simultaneous recordings from 3 accelerometers positioned
+    at different distances from leak sources. This function separates the data from
+    each position and creates individual samples labeled by position (0, 1, 2).
 
     Args:
-        npz_file: Path to NPZ file
-        use_fft: Use FFT features
+        npz_file: Path to NPZ file containing multi-accelerometer data
+        use_fft: Use FFT magnitude features
         use_welch: Use Welch PSD features
         use_bandpower: Use band power features
 
     Returns:
-        List of dictionaries, one per accelerometer with keys:
-        - 'features': Feature array
-        - 'accel_id': Accelerometer ID (0, 1, 2)
-        - 'original_file': Original file path
+        List of 3 dictionaries (one per accelerometer position) with keys:
+        - 'features': Feature array for that position
+        - 'accel_id': Position ID (0, 1, 2)
+        - 'original_file': Original NPZ file path
         - 'hole_size_label': Original hole size label (for reference)
     """
     try:

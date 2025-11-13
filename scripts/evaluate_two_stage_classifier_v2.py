@@ -2,12 +2,25 @@
 """
 Comprehensive evaluation for two-stage classifier (v2 with amplitude features).
 
-Evaluates:
-1. Stage 1 (Accelerometer identification) accuracy
-2. Stage 2 (Hole size classification) accuracy
-3. End-to-end accuracy
-4. Per-accelerometer performance
-5. Confusion matrices for both stages
+This evaluates a two-stage leak detection system for multi-accelerometer arrays.
+Each data sample contains simultaneous recordings from 3 accelerometers at different
+positions (closest, middle, farthest from potential leak sources).
+
+System Architecture:
+    Multi-Accelerometer Array (3 sensors recording simultaneously)
+        ↓
+    [Stage 1: Identify which sensor is closest to the leak]
+        ↓
+    [Stage 2: Classify leak size using the closest sensor's data]
+        ↓
+    Leak Size Prediction (NOLEAK, 1/16", 3/32", 1/8")
+
+Evaluation Metrics:
+1. Stage 1 Accuracy: How well the system identifies the closest accelerometer
+   (Ground truth = accelerometer with strongest signal amplitude)
+2. Stage 2 Accuracy: How well the system predicts leak size
+3. End-to-end Accuracy: Overall leak size prediction accuracy
+4. Per-accelerometer Performance: Accuracy breakdown by sensor position
 
 Usage:
     python scripts/evaluate_two_stage_classifier_v2.py \\
@@ -80,7 +93,21 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def extract_amplitude_features_from_npz(npz_file: Path, sample_rate: int = 10000) -> Tuple:
-    """Extract amplitude features from NPZ file for all 3 accelerometers."""
+    """Extract amplitude features from NPZ file for all 3 accelerometers.
+
+    The NPZ file contains a signal array with shape (timesteps, 3) where each column
+    represents simultaneous recordings from one of the 3 accelerometers in the array.
+
+    Args:
+        npz_file: Path to NPZ file containing multi-accelerometer data
+        sample_rate: Sampling rate in Hz (default: 10000)
+
+    Returns:
+        Tuple of:
+        - features: Array shape (3, n_features) with features for each accelerometer
+        - label: Hole size label from the NPZ file
+        Returns (None, None) if extraction fails
+    """
     from scripts.extract_amplitude_features import extract_amplitude_features
 
     try:
@@ -113,9 +140,15 @@ def extract_amplitude_features_from_npz(npz_file: Path, sample_rate: int = 10000
 def load_test_data(hole_size_data_path: Path, split: str) -> Tuple:
     """Load test data from NPZ files.
 
+    Each NPZ file contains simultaneous recordings from 3 accelerometers.
+    Features are extracted for all 3 accelerometers from each file.
+
     Returns:
-        (features_per_accel, hole_size_labels, npz_files)
-        where features_per_accel is a list of arrays, one per sample, shape (3, n_features)
+        Tuple of:
+        - features_list: List of arrays, each shape (3, n_features) containing features
+          from all 3 accelerometers for one test sample
+        - hole_size_labels: Array of hole size labels (0=NOLEAK, 1=1/16", 2=3/32", 3=1/8")
+        - npz_files: List of file paths for reference
     """
     split_dir = hole_size_data_path / split
     npz_files = sorted(split_dir.glob("*.npz"))
@@ -219,7 +252,21 @@ def evaluate_two_stage_classifier(
     hole_size_labels: np.ndarray,
     output_dir: Path
 ) -> Dict:
-    """Evaluate two-stage classifier and generate comprehensive report."""
+    """Evaluate two-stage classifier and generate comprehensive report.
+
+    Each sample in features_list contains data from all 3 accelerometers (shape: 3, n_features).
+    The evaluation determines which accelerometer is closest to the leak (strongest signal),
+    then evaluates the two-stage classifier's predictions.
+
+    Args:
+        two_stage: Trained TwoStageClassifier instance
+        features_list: List of feature arrays, each shape (3, n_features) for 3 accelerometers
+        hole_size_labels: True hole size labels for each sample
+        output_dir: Directory to save evaluation results
+
+    Returns:
+        Dictionary containing evaluation metrics and confusion matrices
+    """
     n_samples = len(features_list)
 
     # Arrays to store predictions
