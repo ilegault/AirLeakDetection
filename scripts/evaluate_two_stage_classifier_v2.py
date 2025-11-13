@@ -233,19 +233,22 @@ def evaluate_two_stage_classifier(
         if i % max(1, n_samples // 10) == 0:
             LOGGER.info(f"  Progress: {i}/{n_samples}")
 
-        # Stage 1: Predict accelerometer
-        accel_pred = two_stage.predict_accelerometer(features_3accel)
-        pred_accel.append(accel_pred)
-
-        # For "true" accelerometer, infer from signal strength
-        # Strongest signal = closest accelerometer
+        # Determine which accelerometer has the strongest signal
+        # This is our "true" accelerometer (closest to the leak source)
         signal_strengths = np.mean(features_3accel, axis=1)
         true_accel_idx = np.argmax(signal_strengths)
         true_accel.append(true_accel_idx)
 
-        # Stage 2: Predict hole size
-        accel_features = features_3accel[accel_pred, :]
-        hole_pred = two_stage.predict_hole_size(accel_features, accel_pred)
+        # Use the strongest signal's features for prediction
+        # The TwoStageClassifier will predict both accelerometer ID and hole size
+        strongest_features = features_3accel[true_accel_idx, :]
+        prediction = two_stage.predict_single(strongest_features)
+
+        # Extract predictions
+        accel_pred = prediction['accelerometer_id']
+        hole_pred = prediction['hole_size_id']
+
+        pred_accel.append(accel_pred)
         pred_hole_size.append(hole_pred)
 
     true_accel = np.array(true_accel)
