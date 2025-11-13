@@ -318,31 +318,77 @@ class TwoStageClassifier:
     def from_config(
         cls,
         config_path: str,
-        accelerometer_classifier_path: str,
-        hole_size_classifier_dir: str
+        accelerometer_classifier_path: Optional[str] = None,
+        hole_size_classifier_dir: Optional[str] = None
     ) -> TwoStageClassifier:
         """Load a two-stage classifier from configuration.
 
         Args:
             config_path: Path to configuration JSON
-            accelerometer_classifier_path: Path to accelerometer classifier
-            hole_size_classifier_dir: Directory containing hole size classifiers
+            accelerometer_classifier_path: Optional path to accelerometer classifier.
+                If not provided, will be read from metadata.json in the same directory.
+            hole_size_classifier_dir: Optional directory containing hole size classifiers.
+                If not provided, will be read from metadata.json in the same directory.
                 Expected files: accel_0_classifier.pkl, accel_1_classifier.pkl, accel_2_classifier.pkl
 
         Returns:
             Loaded TwoStageClassifier instance
         """
+        config_path = Path(config_path)
+
+        # Load config
         with open(config_path, 'r') as f:
             config = json.load(f)
 
-        # Build hole size classifier paths
-        hole_classifier_dir = Path(hole_size_classifier_dir)
-        hole_classifier_paths = {}
+        # If paths not provided, try to read from metadata.json
+        if accelerometer_classifier_path is None or hole_size_classifier_dir is None:
+            metadata_path = config_path.parent / "metadata.json"
+            if not metadata_path.exists():
+                raise FileNotFoundError(
+                    f"metadata.json not found at {metadata_path}. "
+                    f"Please provide accelerometer_classifier_path and hole_size_classifier_dir."
+                )
 
-        for accel_id in config.get('hole_size_classifier_accelerometers', [0, 1, 2]):
-            model_path = hole_classifier_dir / f"accel_{accel_id}_classifier.pkl"
-            if model_path.exists():
-                hole_classifier_paths[accel_id] = str(model_path)
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+
+            if accelerometer_classifier_path is None:
+                accelerometer_classifier_path = metadata.get('accelerometer_classifier')
+                if accelerometer_classifier_path is None:
+                    raise ValueError(
+                        "accelerometer_classifier not found in metadata.json. "
+                        "Please provide accelerometer_classifier_path argument."
+                    )
+
+            if hole_size_classifier_dir is None:
+                # The hole size classifiers dict contains the full paths
+                hole_size_classifiers_dict = metadata.get('hole_size_classifiers', {})
+                if hole_size_classifiers_dict:
+                    # Use the metadata paths directly
+                    hole_classifier_paths = hole_size_classifiers_dict
+                else:
+                    # Fall back to using the model directory
+                    hole_classifier_paths = {}
+                    for accel_id in config.get('hole_size_classifier_accelerometers', [0, 1, 2]):
+                        model_path = config_path.parent / f"accel_{accel_id}_hole_size_classifier.pkl"
+                        if model_path.exists():
+                            hole_classifier_paths[accel_id] = str(model_path)
+            else:
+                # Build hole size classifier paths from directory
+                hole_classifier_dir = Path(hole_size_classifier_dir)
+                hole_classifier_paths = {}
+                for accel_id in config.get('hole_size_classifier_accelerometers', [0, 1, 2]):
+                    model_path = hole_classifier_dir / f"accel_{accel_id}_classifier.pkl"
+                    if model_path.exists():
+                        hole_classifier_paths[accel_id] = str(model_path)
+        else:
+            # Build hole size classifier paths from directory
+            hole_classifier_dir = Path(hole_size_classifier_dir)
+            hole_classifier_paths = {}
+            for accel_id in config.get('hole_size_classifier_accelerometers', [0, 1, 2]):
+                model_path = hole_classifier_dir / f"accel_{accel_id}_classifier.pkl"
+                if model_path.exists():
+                    hole_classifier_paths[accel_id] = str(model_path)
 
         # Create classifier
         classifier = cls(
