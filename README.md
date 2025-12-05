@@ -1,79 +1,112 @@
 # Air Leak Detection ML System
 
-A machine learning system to detect and classify air leaks using accelerometer data converted to FFT spectral analysis.
+A machine learning system for detecting and classifying air leaks using multi-accelerometer arrays and spectral analysis. The system uses a **two-stage classification approach** to first identify the optimal sensor position and then classify leak severity.
 
 ## Overview
 
-This project builds a complete ML pipeline for detecting and classifying air leaks in 4 categories:
-- **No Leak** - Normal operation
-- **1/16" leak** - Small hole
-- **3/32" leak** - Medium hole
-- **1/8" leak** - Large hole
+This project implements a complete ML pipeline for industrial air leak detection, capable of classifying leaks into 4 categories:
+
+| Class | Description |
+|-------|-------------|
+| **NOLEAK** | Normal operation, no leak detected |
+| **1/16"** | Small hole leak (1/16 inch) |
+| **3/32"** | Medium hole leak (3/32 inch) |
+| **1/8"** | Large hole leak (1/8 inch) |
+
+### Key Results
+
+The system achieves **100% accuracy** on the test set using Random Forest and SVM classifiers with amplitude-based features extracted from accelerometer signals.
 
 ## Sensor Configuration
 
 The system uses **3 single-axis accelerometers** mounted at different distances along the pipe:
-- **Accelerometer 0**: Closest to the leak source
-- **Accelerometer 1**: Middle position
-- **Accelerometer 2**: Farthest from the leak source
 
-**Important**: These are NOT 3-axis accelerometers - each sensor measures acceleration in a single direction. The data has 3 channels corresponding to the 3 separate sensor positions.
+| Accelerometer | Position | WebDAQ Column |
+|---------------|----------|---------------|
+| **Accelerometer 0** | Closest to leak source | `Acceleration 0` |
+| **Accelerometer 1** | Middle position | `Acceleration 1` |
+| **Accelerometer 2** | Farthest from leak source | `Acceleration 2` |
 
-The WebDAQ system records data with column headers:
-- `Acceleration 0` - Closest accelerometer
-- `Acceleration 1` - Middle accelerometer
-- `Acceleration 2` - Farthest accelerometer
+> **Note**: These are 3 separate single-axis accelerometers at different physical positions, NOT a single 3-axis accelerometer. Each sensor measures acceleration in a single direction.
 
-The system integrates with both external MATLAB FFT processing and internal NumPy/SciPy FFT implementations, processing each accelerometer channel independently.
+## Two-Stage Classification Architecture
 
-## 🚀 Phased Implementation
+```
+Multi-Accelerometer Array (3 sensors recording simultaneously)
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │  Stage 1: Position Classifier │
+    │  Identify which accelerometer │
+    │  is closest to leak source    │
+    └───────────────────────────────┘
+                    │
+                    ▼
+         Position ID (0, 1, or 2)
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │  Stage 2: Hole Size Classifier│
+    │  Position-specific model for  │
+    │  leak severity classification │
+    └───────────────────────────────┘
+                    │
+                    ▼
+    Leak Size Prediction (NOLEAK, 1/16", 3/32", 1/8")
+```
 
-This project follows a **multi-phase development approach** to incrementally build the complete system. Each phase has specific goals and deliverables.
+### Why Two Stages?
 
-> **Status**: Currently in early phases with foundational code scaffolding in place. See [`PHASES.md`](docs/PHASES.md) for detailed phase breakdown and current progress.
-
-### Key Features of Phased Approach:
-- ✅ Clear phase boundaries with specific deliverables
-- ✅ Modular implementation allowing parallel development  
-- ✅ Well-documented TODO markers linking to phase numbers
-- ✅ Allows pushing to GitHub before all features are implemented
-- ✅ Easy to track progress and manage dependencies
+1. **Signal Strength Varies with Distance**: The accelerometer closest to a leak will have the strongest signal
+2. **Position-Specific Models**: Each position has unique signal characteristics that benefit from specialized classifiers
+3. **Improved Accuracy**: By first identifying the optimal sensor, the system can apply the most appropriate classification model
 
 ## Project Structure
 
 ```
-air-leak-detection-ml/
-├── src/                      # Main source code
-│   ├── data/                # Data loading, preprocessing, FFT
-│   ├── models/              # Model architectures (CNN, LSTM, RF, SVM, etc.)
-│   ├── training/            # Training pipeline
-│   ├── evaluation/          # Metrics and visualization
-│   ├── prediction/          # Inference and deployment
-│   └── utils/               # Configuration, logging, utilities
-├── scripts/                 # Executable scripts for training, evaluation, prediction
-├── tests/                   # Test suite
-├── notebooks/               # Jupyter notebooks for exploration
-├── config/                  # Configuration files
-├── data/                    # Data directory (ignored in git)
-│   ├── raw/                # Raw WebDAQ CSV files (ignored)
-│   ├── processed/          # Processed data
-│   └── metadata/           # Data metadata
-├── models/                  # Trained models (ignored in git)
-├── results/                 # Results, figures, reports
-└── PHASES.md               # Detailed phase breakdown
+AirLeakDetection/
+├── src/                          # Main source code
+│   ├── data/                     # Data loading and preprocessing
+│   │   ├── data_loader.py        # WebDAQ CSV loading
+│   │   ├── fft_processor.py      # FFT/Welch PSD processing
+│   │   ├── preprocessor.py       # Signal preprocessing
+│   │   ├── feature_extractor.py  # Feature extraction
+│   │   └── ...
+│   ├── models/                   # Model implementations
+│   │   ├── two_stage_classifier.py  # Main two-stage classifier
+│   │   ├── random_forest.py      # Random Forest (best performer)
+│   │   ├── svm_classifier.py     # SVM classifier
+│   │   ├── cnn_1d.py             # 1D CNN for FFT data
+│   │   ├── lstm_model.py         # LSTM model
+│   │   └── ensemble_model.py     # Ensemble methods
+│   ├── training/                 # Training pipeline
+│   ├── evaluation/               # Evaluation and metrics
+│   ├── prediction/               # Inference pipeline
+│   └── utils/                    # Utilities and configuration
+├── scripts/                      # Executable scripts
+│   ├── train_two_stage_classifier_v2.py  # Train two-stage system
+│   ├── train_accelerometer_classifier.py # Train Stage 1
+│   ├── extract_amplitude_features.py     # Feature extraction
+│   └── ...
+├── tests/                        # Test suite
+├── docs/                         # Documentation
+├── config.yaml                   # Configuration file
+└── requirements.txt              # Dependencies
 ```
 
 ## Getting Started
 
 ### Prerequisites
+
 - Python 3.8+
 - See `requirements.txt` for dependencies
 
 ### Installation
+
 ```bash
 # Clone repository
-git clone <repo-url>
-cd air-leak-detection-ml
+git clone https://github.com/ilegault/AirLeakDetection.git
+cd AirLeakDetection
 
 # Create virtual environment
 python -m venv venv
@@ -83,90 +116,192 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Current Phase Status
+### Quick Start
 
-**Phase 3** (Models): Core model architectures defined  
-**Phase 4** (Training): Training pipeline scaffolding ready  
-**Phase 5** (Evaluation): Evaluation framework scaffolding ready  
-**Phase 6** (Prediction): Inference pipeline scaffolding ready  
+#### 1. Prepare Your Data
 
-Check [`PHASES.md`](docs/PHASES.md) for:
-- Detailed breakdown of each phase
-- List of TODOs with their phase assignments
-- Current implementation status
-- Recommended development order
-
-## Key Modules
-
-### Data Pipeline (`src/data/`)
-- **data_loader.py** - Load raw WebDAQ CSV files
-- **fft_processor.py** - Flexible FFT processing (MATLAB, NumPy, SciPy)
-- **preprocessor.py** - Signal preprocessing (bandpass filter, normalization)
-- **feature_extractor.py** - Extract time/frequency domain features
-- **dataset_generator.py** - Create TensorFlow/PyTorch datasets
-
-### Models (`src/models/`)
-- **cnn_1d.py** - 1D CNN for FFT classification
-- **cnn_2d.py** - 2D CNN for spectrograms
-- **lstm_model.py** - LSTM for sequential data
-- **random_forest_model.py** - Random Forest baseline
-- **svm_model.py** - SVM classifier
-- **xgboost_model.py** - Gradient boosting
-- **ensemble_model.py** - Ensemble methods
-
-### Scripts (`scripts/`)
-Execute high-level operations:
-```bash
-python scripts/prepare_data.py          # Prepare dataset
-python scripts/train_model.py           # Train model
-python scripts/evaluate.py              # Evaluate performance
-python scripts/predict.py               # Run inference
-python scripts/compare_fft_methods.py   # Compare FFT approaches
+Place raw WebDAQ CSV files in `data/raw/` organized by class:
+```
+data/raw/
+├── NOLEAK/
+│   ├── sample1.csv
+│   └── ...
+├── 1_16/
+├── 3_32/
+└── 1_8/
 ```
 
-See `PHASES.md` for which scripts are currently functional vs. in development.
+#### 2. Process Data and Extract Features
 
-## Development Notes
+```bash
+# Prepare processed data
+python scripts/prepare_data.py --input-dir data/raw/ --output-dir data/processed/
 
-### About TODOs
-This codebase intentionally contains TODO comments marking unimplemented functionality:
-- These are **not bugs** - they are **intentional development markers**
-- Each TODO is tied to a specific phase (see `PHASES.md`)
-- Scripts are scaffolded to run but will indicate "logic to be implemented"
-- This allows pushing to GitHub and collaborating before all features are done
+# Extract amplitude-based features for accelerometer classification
+python scripts/extract_amplitude_features.py \
+    --input-dir data/processed/ \
+    --output-dir data/accelerometer_classifier_v2/
+```
 
-### Before Using
-1. Prepare your raw accelerometer data in `data/raw/`
-2. Reference `PHASES.md` to understand what's ready vs. in-progress
-3. Check phase-specific docs in `/docs/` for implementation details
+#### 3. Train the Two-Stage Classifier
+
+```bash
+# Train Stage 1: Accelerometer position classifier
+python scripts/train_accelerometer_classifier.py \
+    --data-path data/accelerometer_classifier_v2/ \
+    --model-type random_forest
+
+# Train Stage 2: Two-stage classifier with hole size models
+python scripts/train_two_stage_classifier_v2.py \
+    --accelerometer-data data/accelerometer_classifier_v2/ \
+    --accelerometer-classifier models/accelerometer_classifier/model_*/random_forest_accelerometer.pkl \
+    --hole-size-data data/processed/ \
+    --output-dir models/two_stage_classifier_v2/
+```
+
+#### 4. Evaluate
+
+```bash
+# Evaluate the two-stage classifier
+python src/evaluation/evaluate_two_stage_classifier_v2.py \
+    --config models/two_stage_classifier_v2/model_*/two_stage_config.json \
+    --hole-size-data data/processed/ \
+    --output-dir results/two_stage_classifier_v2/
+```
+
+## Feature Extraction
+
+The system extracts amplitude-based features that capture signal strength differences between accelerometers:
+
+| Feature | Description |
+|---------|-------------|
+| RMS | Root Mean Square - overall signal strength |
+| Standard Deviation | Signal variability |
+| Peak Amplitude | Maximum excursion |
+| Signal Energy | Total power |
+| Peak-to-Peak | Maximum range |
+| Crest Factor | Peak / RMS ratio |
+| Kurtosis | Tail behavior (spikiness) |
+| Skewness | Signal asymmetry |
+| FFT Statistics | Mean, max, std of FFT magnitude |
+| Band Power | Power in frequency bands (50-500Hz, 500-1500Hz, 1500-4000Hz) |
+| Welch PSD | Power spectral density statistics |
+
+## Models
+
+### Available Models
+
+| Model | Type | Best Use Case |
+|-------|------|---------------|
+| **Random Forest** | Traditional ML | Best overall performance (100% accuracy) |
+| **SVM** | Traditional ML | Excellent performance (100% accuracy) |
+| CNN-1D | Deep Learning | FFT magnitude classification |
+| LSTM | Deep Learning | Sequential signal data |
+| Ensemble | Combined | Model combination strategies |
+
+### Model Performance Summary
+
+| Model | Test Accuracy | Status |
+|-------|---------------|--------|
+| Random Forest | **100%** | Production Ready |
+| SVM | **100%** | Production Ready |
+| CNN-1D | 26% | Needs Improvement |
+| LSTM | 26% | Needs Improvement |
+
+> Traditional ML models significantly outperform deep learning models on this task. The FFT and amplitude features are highly discriminative, making Random Forest and SVM ideal choices.
+
+## Configuration
+
+Configuration is managed via `config.yaml`:
+
+```yaml
+data:
+  raw_data_path: "data/raw"
+  processed_data_path: "data/processed"
+  sample_rate: 17066  # WebDAQ sample rate (Hz)
+  duration: 10        # Recording duration (seconds)
+  n_channels: 3       # Number of accelerometers
+
+preprocessing:
+  fft_size: 2048
+  window: "hanning"
+  freq_min: 30        # Minimum frequency (Hz)
+  freq_max: 2000      # Maximum frequency (Hz)
+
+  # Welch's method parameters
+  welch:
+    num_segments: 16
+    window_type: "hamming"
+    overlap_ratio: 0.5
+    bandpower_freq_min: 50
+    bandpower_freq_max: 4000
+
+training:
+  batch_size: 64
+  epochs: 100
+  learning_rate: 0.001
+  validation_split: 0.15
+  test_split: 0.15
+
+classes:
+  0: "NOLEAK"
+  1: "1_16"
+  2: "3_32"
+  3: "1_8"
+```
+
+## FFT Processing Methods
+
+The system supports multiple FFT computation methods:
+
+| Method | Description |
+|--------|-------------|
+| **Welch PSD** | Power Spectral Density with averaging (recommended) |
+| SciPy FFT | Standard FFT with windowing |
+| NumPy FFT | Basic FFT implementation |
+| MATLAB Import | Load pre-computed FFT from .mat files |
 
 ## Data Directory
 
 The following directories are **excluded from Git** (see `.gitignore`):
+
 - `data/raw/` - Raw accelerometer CSV files
+- `data/processed/` - Processed NPZ files
 - `models/` - Trained model weights
-- `experiments/` - Experiment tracking artifacts
-- `*.log` - Log files
+- `results/` - Evaluation results
+- `logs/` - Log files
 
-This keeps the repository lightweight and prevents accidental commits of large data files.
+## Testing
 
-## Contributing
+```bash
+# Run all tests
+pytest tests/
 
-1. Check `PHASES.md` for the current phase status
-2. Create branches for specific phases: `phase-4-training`, `phase-5-evaluation`, etc.
-3. Include phase number in commit messages
-4. Update `PHASES.md` when completing TODO items
+# Run specific test module
+pytest tests/test_evaluation.py -v
+```
+
+## Documentation
+
+Additional documentation is available in the `docs/` directory:
+
+- `PHASES.md` - Development phase breakdown
+- `TRAINING_GUIDE.md` - Detailed training instructions
+- `BENCHMARKING_GUIDE.md` - Performance benchmarking guide
+- `WELCH_METHOD.md` - Welch's method implementation details
+- `ACCELEROMETER_SETUP.md` - Sensor configuration details
 
 ## License
 
-[Add your license here]
+MIT License - see [LICENSE](LICENSE) for details.
 
-## Authors
+## Author
 
 Isaac Legault
 
 ## References
 
-- MATLAB FFT Integration: See `src/data/fft_processor.py`
-- WebDAQ Format: See `src/data/data_loader.py`
-- Model Architectures: See `src/models/`
+- FFT Processing: `src/data/fft_processor.py`
+- WebDAQ Data Format: `src/data/data_loader.py`
+- Two-Stage Classifier: `src/models/two_stage_classifier.py`
+- Feature Extraction: `scripts/extract_amplitude_features.py`
