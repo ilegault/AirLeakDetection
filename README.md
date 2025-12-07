@@ -199,14 +199,14 @@ The system extracts amplitude-based features that capture signal strength differ
 | LSTM | Deep Learning | Sequential signal data |
 | Ensemble | Combined | Model combination strategies |
 
-### Model Performance Summary
+### Model Performance Summary for Hole Classification
 
-| Model | Test Accuracy | Status |
-|-------|---------------|--------|
-| Random Forest | **100%** | Production Ready |
-| SVM | **100%** | Production Ready |
-| CNN-1D | 26% | Needs Improvement |
-| LSTM | 26% | Needs Improvement |
+| Model | Test Accuracy |
+|-------|---------------|
+| Random Forest | **100%** |
+| SVM | **100%** |
+| CNN-1D | 26% |
+| LSTM | 26% |
 
 > Traditional ML models significantly outperform deep learning models on this task. The FFT and amplitude features are highly discriminative, making Random Forest and SVM ideal choices.
 
