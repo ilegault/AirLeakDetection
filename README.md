@@ -297,7 +297,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Author
 
-Isaac Legault
+Isaac Legault - ilegault004@gmail.com
 
 ## References
 
